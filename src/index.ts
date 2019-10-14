@@ -4,7 +4,9 @@ let hoverCtx: CanvasRenderingContext2D;
 let borderCtx: CanvasRenderingContext2D;
 let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
-// TODO: Add BorderRadius.
+// TODO: Add borderRadius.
+// TODO: Set onScroll position.
+// TODO: Remove currentEventTarget to global elements.
 function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
