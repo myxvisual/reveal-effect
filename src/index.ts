@@ -1,15 +1,18 @@
-
 let hoverCanvas: HTMLCanvasElement;
 let borderCanvas: HTMLCanvasElement;
 let hoverCtx: CanvasRenderingContext2D;
 let borderCtx: CanvasRenderingContext2D;
 let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
+function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
+    return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
+}
 export interface RevalConfig {
     borderWidth?: number;
     hoverSize?: number;
     effectEnable?: "hover" | "border" | "both";
     borderType?: "inside" | "outside";
+    borderColor?: string;
 }
 
 export interface CircleGradient {
@@ -26,11 +29,22 @@ export interface RevealItem extends RevalConfig {
 }
 
 const revealConfig: Required<RevalConfig> = {
-    hoverSize: 60,
+    hoverSize: 80,
     borderWidth: 2,
     effectEnable: "both",
-    borderType: "inside"
+    borderType: "inside",
+    borderColor: "rgba(255, 255, 255, .25)"
 };
+
+function getRevealConfig(revealItem: RevealItem) {
+    return {
+        hoverSize: revealItem.hoverSize === void 0 ? revealConfig.hoverSize : revealItem.hoverSize,
+        borderWidth: revealItem.borderWidth === void 0 ? revealConfig.borderWidth : revealItem.borderWidth,
+        effectEnable: revealItem.effectEnable === void 0 ? revealConfig.effectEnable : revealItem.effectEnable,
+        borderType: revealItem.borderType === void 0 ? revealConfig.borderType : revealItem.borderType,
+        borderColor: revealItem.borderColor === void 0 ? revealConfig.borderColor : revealItem.borderColor,
+    } as Required<RevalConfig>;
+}
 
 function initRevealEffect() {
     hoverCanvas = document.createElement("canvas");
@@ -77,22 +91,15 @@ function initRevealEffect() {
 function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    const rect = hoverEl.getBoundingClientRect() as DOMRect;
+    const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
+
     const revealItem = revealItemsMap.get(hoverEl) as RevealItem;
-    const newRevealConfig = {
-        hoverSize: revealItem.hoverSize === void 0 ? revealConfig.hoverSize : revealItem.hoverSize,
-        borderWidth: revealItem.borderWidth === void 0 ? revealConfig.borderWidth : revealItem.borderWidth,
-        effectEnable: revealItem.effectEnable === void 0 ? revealConfig.effectEnable : revealItem.effectEnable,
-        borderType: revealItem.borderType === void 0 ? revealConfig.borderType : revealItem.borderType,
-    };
-    
-    const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
-    const borderWidth = Number(elBorderWidth.replace("px", "")) || newRevealConfig.borderWidth;
+    const newRevealConfig = getRevealConfig(revealItem);
 
     const circleGradient = {
         x: mouseX,
         y: mouseY,
-        color1: "rgba(255, 255, 255, .1)",
+        color1: "rgba(255, 255, 255, .25)",
         color2: "rgba(255, 255, 255, 0)",
         r1: 0,
         r2: newRevealConfig.hoverSize
@@ -106,35 +113,87 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     }
 
-    // inside hover circle.
+    // inside hover effect.
     function drawHover() {
         hoverCtx.globalCompositeOperation = "source-over";
         hoverCtx.fillStyle = "#fff";
-        hoverCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        hoverCtx.fillRect(hoverRect.x, hoverRect.y, hoverRect.width, hoverRect.height);
 
         hoverCtx.globalCompositeOperation = "destination-in";
         drawCircle(hoverCtx, 0.1);
     }
 
-    // draw inside border.
+    // draw border effect.
     function drawBorder() {
-        if (newRevealConfig.borderType === "inside") {
-            // draw inside border.
-            borderCtx.globalCompositeOperation = "source-over";
-            borderCtx.fillStyle = circleGradient.color1;
-            borderCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
-            borderCtx.globalCompositeOperation = "destination-out";
-            borderCtx.fillStyle = "#fff";
-            borderCtx.fillRect(rect.x + borderWidth, rect.y + borderWidth, rect.width - 2 * borderWidth, rect.height - 2 * borderWidth);
-        } else {
-            // draw outside border.
-            borderCtx.globalCompositeOperation = "source-over";
-            borderCtx.fillStyle = circleGradient.color1;
-            borderCtx.fillRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + 2 * borderWidth, rect.height + 2 * borderWidth);
-            borderCtx.globalCompositeOperation = "destination-out";
-            borderCtx.fillStyle = "#fff";
-            borderCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        const left = mouseX - newRevealConfig.hoverSize;
+        const top = mouseY - newRevealConfig.hoverSize;
+        const effectRect = {
+            left: left,
+            top: top,
+            right: left + 2 * newRevealConfig.hoverSize,
+            bottom: top + 2 * newRevealConfig.hoverSize
+        } as DOMRect;
+        const effectItems: RevealItem[] = [];
+        revealItemsMap.forEach(revealItem => {
+            if (revealItem.element) {
+                const rect = revealItem.element.getBoundingClientRect() as DOMRect;
+                const isNotIntersect =
+                    (effectRect.right < rect.left) ||
+                    (effectRect.left > rect.right) ||
+                    (effectRect.bottom < rect.top) ||
+                    (effectRect.top > rect.bottom);
+
+                if (!isNotIntersect) {
+                    if (!isRectangleOverlap(hoverRect, rect) && revealItem.element !== hoverEl) {
+                        effectItems.push(revealItem);
+                    }
+                }
+            }
+        });
+        effectItems.push(revealItem);
+
+
+        function drawBorders() {
+            effectItems.forEach(revealItem => {
+                const element = revealItem.element;
+                const rect = element.getBoundingClientRect() as DOMRect;
+                const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
+                const currRevealConfig = getRevealConfig(revealItem);
+                const borderWidth = Number(elBorderWidth.replace("px", "")) || currRevealConfig.borderWidth;
+                
+                if (newRevealConfig.borderType === "inside") {
+                    // draw inside border.
+                    borderCtx.globalCompositeOperation = "source-over";
+                    borderCtx.fillStyle = currRevealConfig.borderColor;
+                    borderCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                } else {
+                    // draw outside border.
+                    borderCtx.globalCompositeOperation = "source-over";
+                    borderCtx.fillStyle = currRevealConfig.borderColor;
+                    borderCtx.fillRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + 2 * borderWidth, rect.height + 2 * borderWidth);
+                }
+            });
+            effectItems.forEach(revealItem => {
+                const element = revealItem.element;
+                const rect = element.getBoundingClientRect() as DOMRect;
+                const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
+                const currRevealConfig = getRevealConfig(revealItem);
+                const borderWidth = Number(elBorderWidth.replace("px", "")) || currRevealConfig.borderWidth;
+
+                if (newRevealConfig.borderType === "inside") {
+                    // draw inside border.
+                    borderCtx.globalCompositeOperation = "destination-out";
+                    borderCtx.fillStyle = "#fff";
+                    borderCtx.fillRect(rect.x + borderWidth, rect.y + borderWidth, rect.width - 2 * borderWidth, rect.height - 2 * borderWidth);
+                } else {
+                    // draw outside border.
+                    borderCtx.globalCompositeOperation = "destination-out";
+                    borderCtx.fillStyle = "#fff";
+                    borderCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                }
+            });
         }
+        drawBorders();
 
         borderCtx.globalCompositeOperation = "destination-in";
         drawCircle(borderCtx, 1);
@@ -166,6 +225,8 @@ function handleMouseMove(e: MouseEvent) {
     const el = e.target as HTMLElement;
     if (el && revealItemsMap.has(el)) {
         drawEffects(e.clientX, e.clientY, el);
+    } else {
+        clearCanvas();
     }
 }
 
