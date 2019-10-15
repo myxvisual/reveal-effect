@@ -118,7 +118,7 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     const isHoverReveal = revealItemsMap.has(hoverEl);
     const hoverRevealConfig = isHoverReveal ?  getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
-    
+
     const effectLeft = mouseX - hoverRevealConfig.hoverSize;
     const effectTop = mouseY - hoverRevealConfig.hoverSize;
     const effectSize = 2 * hoverRevealConfig.hoverSize;
