@@ -100,22 +100,18 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
-
-    const revealItem = revealItemsMap.get(hoverEl) as RevealItem;
-    const newRevealConfig = getRevealConfig(revealItem);
+    const hoverRevealConfig = revealItemsMap.has(hoverEl) ? getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
 
     const circleGradient = {
         x: mouseX,
         y: mouseY,
-        color1: revealConfig.hoverColor,
         color2: "rgba(255, 255, 255, 0)",
         r1: 0,
-        r2: newRevealConfig.hoverSize
-    }
+    };
 
     function drawCircle(ctx: CanvasRenderingContext2D) {
-        const gradient = ctx.createRadialGradient(circleGradient.x, circleGradient.y, circleGradient.r1, circleGradient.x, circleGradient.y, circleGradient.r2)
-        gradient.addColorStop(0, circleGradient.color1);
+        const gradient = ctx.createRadialGradient(circleGradient.x, circleGradient.y, circleGradient.r1, circleGradient.x, circleGradient.y, hoverRevealConfig.hoverSize)
+        gradient.addColorStop(0, hoverRevealConfig.hoverColor);
         gradient.addColorStop(1, circleGradient.color2);
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
@@ -125,7 +121,7 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     function drawHover() {
         hoverCtx.globalCompositeOperation = "source-over";
         hoverCtx.fillStyle = "#fff";
-        hoverCtx.fillRect(hoverRect.x, hoverRect.y, hoverRect.width, hoverRect.height);
+        hoverCtx.fillRect(hoverRect.x - hoverRevealConfig.hoverSize, hoverRect.y - hoverRevealConfig.hoverSize, 2 * hoverRevealConfig.hoverSize, 2 * hoverRevealConfig.hoverSize);
 
         hoverCtx.globalCompositeOperation = "destination-in";
         drawCircle(hoverCtx);
@@ -133,36 +129,30 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
     // draw border effect.
     function drawBorder() {
-        const left = mouseX - newRevealConfig.hoverSize;
-        const top = mouseY - newRevealConfig.hoverSize;
+        const left = mouseX - revealConfig.hoverSize;
+        const top = mouseY - revealConfig.hoverSize;
         const effectRect = {
             left: left,
             top: top,
-            right: left + 2 * newRevealConfig.hoverSize,
-            bottom: top + 2 * newRevealConfig.hoverSize
+            right: left + 2 * revealConfig.hoverSize,
+            bottom: top + 2 * revealConfig.hoverSize
         } as DOMRect;
+
         const effectItems: RevealItem[] = [];
         revealItemsMap.forEach(revealItem => {
             if (revealItem.element) {
                 const rect = revealItem.element.getBoundingClientRect() as DOMRect;
-                const isNotIntersect =
-                    (effectRect.right < rect.left) ||
-                    (effectRect.left > rect.right) ||
-                    (effectRect.bottom < rect.top) ||
-                    (effectRect.top > rect.bottom);
-
-                if (!isNotIntersect) {
-                    if (!isRectangleOverlap(hoverRect, rect) && revealItem.element !== hoverEl) {
-                        effectItems.push(revealItem);
-                    }
+                
+                if (!isRectangleOverlap(effectRect, rect)) {
+                    effectItems.push(revealItem);
                 }
             }
         });
-        effectItems.push(revealItem);
 
         function drawBorders() {
             effectItems.forEach(revealItem => {
                 const element = revealItem.element;
+                const newRevealConfig = getRevealConfig(revealItem);
                 const rect = element.getBoundingClientRect() as DOMRect;
                 const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
                 const currRevealConfig = getRevealConfig(revealItem);
@@ -187,7 +177,7 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         drawCircle(borderCtx);
     }
 
-    switch (newRevealConfig.effectEnable) {
+    switch (hoverRevealConfig.effectEnable) {
         case "hover": {
             drawHover();
             break;
