@@ -11,6 +11,10 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/tinycolor2": "^1.4.2",
     "typescript": "^3.6.4"
+  },
+  "dependencies": {
+    "tinycolor2": "^1.4.1"
   }
 }

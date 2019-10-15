@@ -1,3 +1,5 @@
+import tinyColor from "tinycolor2";
+
 let hoverCanvas: HTMLCanvasElement;
 let borderCanvas: HTMLCanvasElement;
 let hoverCtx: CanvasRenderingContext2D;
@@ -6,10 +8,10 @@ let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
 // TODO: Add borderRadius.
 // TODO: Set onScroll position.
-// TODO: Remove currentEventTarget to global elements.
 function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
+
 export interface RevalConfig {
     borderWidth?: number;
     hoverSize?: number;
@@ -38,6 +40,10 @@ const revealConfig: Required<RevalConfig> = {
     borderType: "inside",
     hoverColor: "rgba(255, 255, 255, .2)",
 };
+let hoverMiddleColor1: string;
+let hoverMiddleColor2: string;
+let transparentColor: string;
+setMiddleColors(revealConfig.hoverColor);
 
 function getRevealConfig(revealItem: RevealItem) {
     return {
@@ -89,105 +95,100 @@ function initRevealEffect() {
 
     window.removeEventListener("scroll", clearCanvas);
     window.removeEventListener("resize", setCanvasStyles);
-    document.documentElement.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mousemove", handleMouseMove);
 
     window.addEventListener("scroll", clearCanvas);
     window.addEventListener("resize", setCanvasStyles);
-    document.documentElement.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove);
 }
 
 function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
+    const isHoverReveal = revealItemsMap.has(hoverEl);
+    const hoverRevealConfig = isHoverReveal ?  getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
 
-    const revealItem = revealItemsMap.get(hoverEl) as RevealItem;
-    const newRevealConfig = getRevealConfig(revealItem);
+    
+    const effectLeft = mouseX - hoverRevealConfig.hoverSize;
+    const effectTop = mouseY - hoverRevealConfig.hoverSize;
+    const effectSize = 2 * hoverRevealConfig.hoverSize;
+    const effectRect = {
+        left: effectLeft,
+        top: effectTop,
+        right: effectLeft + effectSize,
+        bottom: effectTop + effectSize
+    } as DOMRect;
 
-    const circleGradient = {
-        x: mouseX,
-        y: mouseY,
-        color1: revealConfig.hoverColor,
-        color2: "rgba(255, 255, 255, 0)",
-        r1: 0,
-        r2: newRevealConfig.hoverSize
-    }
-
-    function drawCircle(ctx: CanvasRenderingContext2D) {
-        const gradient = ctx.createRadialGradient(circleGradient.x, circleGradient.y, circleGradient.r1, circleGradient.x, circleGradient.y, circleGradient.r2)
-        gradient.addColorStop(0, circleGradient.color1);
-        gradient.addColorStop(1, circleGradient.color2);
+    function drawHoverCircle(ctx: CanvasRenderingContext2D, draw2border = false) {
+        const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, hoverRevealConfig.hoverSize)
+        
+        if (draw2border) {
+            gradient.addColorStop(0, revealConfig.hoverColor);
+            gradient.addColorStop(1, transparentColor);
+        } else {
+            gradient.addColorStop(0, hoverMiddleColor2);
+            gradient.addColorStop(1, transparentColor);
+        }
+        
         ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx.fillRect(mouseX - hoverRevealConfig.hoverSize, mouseY - hoverRevealConfig.hoverSize, mouseX + hoverRevealConfig.hoverSize, mouseY + hoverRevealConfig.hoverSize);
     }
 
     // inside hover effect.
     function drawHover() {
-        hoverCtx.globalCompositeOperation = "source-over";
-        hoverCtx.fillStyle = "#fff";
-        hoverCtx.fillRect(hoverRect.x, hoverRect.y, hoverRect.width, hoverRect.height);
-
-        hoverCtx.globalCompositeOperation = "destination-in";
-        drawCircle(hoverCtx);
+        if (isHoverReveal) {
+            hoverCtx.globalCompositeOperation = "source-over";
+            hoverCtx.fillStyle = "#fff";
+            const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
+            hoverCtx.fillRect(hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height);
+    
+            hoverCtx.globalCompositeOperation = "destination-in";
+            drawHoverCircle(hoverCtx);
+        }
     }
 
     // draw border effect.
     function drawBorder() {
-        const left = mouseX - newRevealConfig.hoverSize;
-        const top = mouseY - newRevealConfig.hoverSize;
-        const effectRect = {
-            left: left,
-            top: top,
-            right: left + 2 * newRevealConfig.hoverSize,
-            bottom: top + 2 * newRevealConfig.hoverSize
-        } as DOMRect;
         const effectItems: RevealItem[] = [];
         revealItemsMap.forEach(revealItem => {
             if (revealItem.element) {
                 const rect = revealItem.element.getBoundingClientRect() as DOMRect;
-                const isNotIntersect =
-                    (effectRect.right < rect.left) ||
-                    (effectRect.left > rect.right) ||
-                    (effectRect.bottom < rect.top) ||
-                    (effectRect.top > rect.bottom);
-
-                if (!isNotIntersect) {
-                    if (!isRectangleOverlap(hoverRect, rect) && revealItem.element !== hoverEl) {
-                        effectItems.push(revealItem);
-                    }
+                if (isRectangleOverlap(effectRect, rect)) {
+                    effectItems.push(revealItem);
                 }
             }
+            // effectItems.push(revealItem);
         });
-        effectItems.push(revealItem);
 
-        function drawBorders() {
+        function drawAllRevealBorders() {
             effectItems.forEach(revealItem => {
                 const element = revealItem.element;
+                if (!element) return;
                 const rect = element.getBoundingClientRect() as DOMRect;
                 const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
                 const currRevealConfig = getRevealConfig(revealItem);
                 const borderWidth = Number(elBorderWidth.replace("px", "")) || currRevealConfig.borderWidth;
 
-                if (newRevealConfig.borderType === "inside") {
+                borderCtx.globalCompositeOperation = "source-over";
+                borderCtx.lineWidth = borderWidth;
+                borderCtx.strokeStyle = "#fff";
+                if (borderWidth || currRevealConfig.borderType === "inside") {
                     // draw inside border.
-                    borderCtx.globalCompositeOperation = "source-over";
-                    borderCtx.strokeStyle = "#fff";
-                    borderCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                    borderCtx.strokeRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth);
                 } else {
                     // draw outside border.
-                    borderCtx.globalCompositeOperation = "source-over";
-                    borderCtx.strokeStyle = "#fff";
-                    borderCtx.strokeRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth);
+                    borderCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
                 }
             });
         }
 
-        drawBorders();
+        drawAllRevealBorders();
+        // make border mask.
         borderCtx.globalCompositeOperation = "destination-in";
-        drawCircle(borderCtx);
+        drawHoverCircle(borderCtx, true);
     }
 
-    switch (newRevealConfig.effectEnable) {
+    switch (hoverRevealConfig.effectEnable) {
         case "hover": {
             drawHover();
             break;
@@ -211,21 +212,23 @@ function clearCanvas() {
 
 function handleMouseMove(e: MouseEvent) {
     const el = e.target as HTMLElement;
-    if (el && revealItemsMap.has(el)) {
-        drawEffects(e.clientX, e.clientY, el);
-    } else {
-        let isInsideEl = false;
-        for (const revealItem of revealItemsMap) {
-            if (revealItem[0] && revealItem[0].contains(el)) {
-                isInsideEl = true;
-                drawEffects(e.clientX, e.clientY, revealItem[0]);
-                break;
-            }
-        }
-        if (!isInsideEl) {
-            clearCanvas();
-        }
-    }
+    drawEffects(e.clientX, e.clientY, el);
+
+    // if (el && revealItemsMap.has(el)) {
+    //     drawEffects(e.clientX, e.clientY, el);
+    // } else {
+    //     let isInsideEl = false;
+    //     for (const revealItem of revealItemsMap) {
+    //         if (revealItem[0] && revealItem[0].contains(el)) {
+    //             isInsideEl = true;
+    //             drawEffects(e.clientX, e.clientY, revealItem[0]);
+    //             break;
+    //         }
+    //     }
+    //     if (!isInsideEl) {
+    //         clearCanvas();
+    //     }
+    // }
 }
 
 function checkCanvasCreated() {
@@ -264,7 +267,16 @@ function clearRevealItems() {
     revealItemsMap.clear();
 }
 
+function setMiddleColors(hoverColor = revealConfig.hoverColor) {
+    const { h, s, l, a } = tinyColor(hoverColor).toHsl();
+    hoverMiddleColor1 = tinyColor({ h, s, l, a: a / 4 }).toRgbString();
+    hoverMiddleColor2 = tinyColor({ h, s, l, a: a / 8 }).toRgbString();
+    transparentColor = tinyColor({ h, s, l, a: 0 }).toRgbString();
+}
+
 function setRevealConfig(newConfig: RevalConfig) {
+    setMiddleColors(newConfig.hoverColor);
+
     Object.assign(revealConfig, newConfig);
 }
 
