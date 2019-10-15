@@ -33,6 +33,11 @@ export interface RevealItem extends RevalConfig {
     element: HTMLElement;
 }
 
+const cursorPosition = {
+    x: 0,
+    y: 0
+};
+
 const revealConfig: Required<RevalConfig> = {
     hoverSize: 60,
     borderWidth: 2,
@@ -93,21 +98,26 @@ function initRevealEffect() {
     }
     setCanvasStyles();
 
-    window.removeEventListener("scroll", clearCanvas);
+    function handleScroll(e: Event) {
+        drawEffects(cursorPosition.x, cursorPosition.y, e.target as HTMLElement);
+    }
+
+    window.removeEventListener("scroll", handleScroll);
     window.removeEventListener("resize", setCanvasStyles);
     window.removeEventListener("mousemove", handleMouseMove);
 
-    window.addEventListener("scroll", clearCanvas);
+    window.addEventListener("scroll", handleScroll);
     window.addEventListener("resize", setCanvasStyles);
     window.addEventListener("mousemove", handleMouseMove);
 }
 
 function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
+    cursorPosition.x = mouseX;
+    cursorPosition.y = mouseY;
     hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     const isHoverReveal = revealItemsMap.has(hoverEl);
     const hoverRevealConfig = isHoverReveal ?  getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
-
     
     const effectLeft = mouseX - hoverRevealConfig.hoverSize;
     const effectTop = mouseY - hoverRevealConfig.hoverSize;
