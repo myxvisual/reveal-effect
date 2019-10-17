@@ -7,9 +7,12 @@ let borderCtx: CanvasRenderingContext2D;
 let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
 // TODO: Add borderRadius.
-// TODO: Set onScroll position.
 function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
+}
+
+function isInside(position: { left: number; top: number}, rect: DOMRect) {
+    return (position.left > rect.left && position.left < rect.right && position.top > rect.top && position.top < rect.bottom);
 }
 
 export interface RevalConfig {
@@ -18,6 +21,7 @@ export interface RevalConfig {
     effectEnable?: "hover" | "border" | "both";
     borderType?: "inside" | "outside";
     hoverColor?: string;
+    zIndex?: number;
 }
 
 export interface CircleGradient {
@@ -29,95 +33,111 @@ export interface CircleGradient {
     r2: number;
 }
 
-export interface RevealItem extends RevalConfig {
+export interface RevealItem {
     element: HTMLElement;
+
+    borderWidth?: RevalConfig["borderWidth"];
+    hoverSize?: RevalConfig["hoverSize"];
+    effectEnable?: RevalConfig["effectEnable"];
+    borderType?: RevalConfig["borderType"];
+    hoverColor?: RevalConfig["hoverColor"];
+    zIndex?: RevalConfig["zIndex"];
 }
 
 const cursorPosition = {
     x: 0,
     y: 0
 };
-
 const revealConfig: Required<RevalConfig> = {
     hoverSize: 60,
+    hoverColor: "rgba(255, 255, 255, .2)",
     borderWidth: 2,
     effectEnable: "both",
     borderType: "inside",
-    hoverColor: "rgba(255, 255, 255, .2)",
+    zIndex: 9999
 };
-let hoverMiddleColor1: string;
-let hoverMiddleColor2: string;
-let transparentColor: string;
-setMiddleColors(revealConfig.hoverColor);
+let { borderColor, transparentColor } = getMiddleColors(revealConfig.hoverColor);
 
-function getRevealConfig(revealItem: RevealItem) {
-    return {
-        hoverSize: revealItem.hoverSize === void 0 ? revealConfig.hoverSize : revealItem.hoverSize,
-        borderWidth: revealItem.borderWidth === void 0 ? revealConfig.borderWidth : revealItem.borderWidth,
-        effectEnable: revealItem.effectEnable === void 0 ? revealConfig.effectEnable : revealItem.effectEnable,
-        borderType: revealItem.borderType === void 0 ? revealConfig.borderType : revealItem.borderType,
-        hoverColor: revealItem.hoverColor === void 0 ? revealConfig.hoverColor : revealItem.hoverColor,
-    } as Required<RevalConfig>;
-}
-
-function initRevealEffect() {
+function createCanvas() {
     hoverCanvas = document.createElement("canvas");
     borderCanvas = document.createElement("canvas");
     document.body.appendChild(hoverCanvas);
     document.body.appendChild(borderCanvas);
     hoverCtx = hoverCanvas.getContext("2d") as CanvasRenderingContext2D;
     borderCtx = borderCanvas.getContext("2d") as CanvasRenderingContext2D;
-    
-    function setCanvasStyles() {
-        Object.assign(hoverCanvas.style, {
-            width: `${window.innerWidth}px`,
-            height: `${window.innerHeight}px`,
-            position: "fixed",
-            left: "0px",
-            top: "0px",
-            pointerEvents: "none",
-            zIndex: 9999
-        });
-        Object.assign(borderCanvas.style, {
-            width: `${window.innerWidth}px`,
-            height: `${window.innerHeight}px`,
-            position: "fixed",
-            left: "0px",
-            top: "0px",
-            pointerEvents: "none",
-            zIndex: 9999
-        });
-        Object.assign(hoverCanvas, {
-            width: window.innerWidth,
-            height: window.innerHeight,
-        })
-        Object.assign(borderCanvas, {
-            width: window.innerWidth,
-            height: window.innerHeight,
-        })
-    }
-    setCanvasStyles();
-
-    function handleScroll(e: Event) {
-        drawEffects(cursorPosition.x, cursorPosition.y, e.target as HTMLElement);
-    }
-
-    window.removeEventListener("scroll", handleScroll);
-    window.removeEventListener("resize", setCanvasStyles);
-    window.removeEventListener("mousemove", handleMouseMove);
-
-    window.addEventListener("scroll", handleScroll);
-    window.addEventListener("resize", setCanvasStyles);
-    window.addEventListener("mousemove", handleMouseMove);
 }
 
-function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
+function updateCanvas() {
+    Object.assign(hoverCanvas.style, {
+        width: `${window.innerWidth}px`,
+        height: `${window.innerHeight}px`,
+        position: "fixed",
+        left: "0px",
+        top: "0px",
+        pointerEvents: "none",
+        zIndex: revealConfig.zIndex
+    });
+    Object.assign(borderCanvas.style, {
+        width: `${window.innerWidth}px`,
+        height: `${window.innerHeight}px`,
+        position: "fixed",
+        left: "0px",
+        top: "0px",
+        pointerEvents: "none",
+        zIndex: revealConfig.zIndex
+    });
+    Object.assign(hoverCanvas, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+    })
+    Object.assign(borderCanvas, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+    })
+}
+
+function createEffect() {
+    createCanvas();
+    updateCanvas();
+
+    window.removeEventListener("scroll", handleScroll, true);
+    window.addEventListener("scroll", handleScroll, true);
+    window.removeEventListener("resize", updateCanvas, true);
+    window.addEventListener("resize", updateCanvas, true);
+    window.removeEventListener("mousemove", handleMouseMove, true);
+    window.addEventListener("mousemove", handleMouseMove, true);
+}
+
+function handleScroll(e: Event) {
+    let hoverEl = e.target as HTMLElement;
+    revealItemsMap.forEach(revealItem => {
+        if (revealItem.element) {
+            const rect = revealItem.element.getBoundingClientRect() as DOMRect;
+            const isInsideEl = isInside({ left: cursorPosition.x, top: cursorPosition.y }, rect);
+            if (isInsideEl) {
+                if (hoverEl.contains(revealItem.element)) {
+                    hoverEl = revealItem.element;
+                }
+            }
+        }
+    });
+    drawEffect(cursorPosition.x, cursorPosition.y, hoverEl);
+}
+
+function handleMouseMove(e: MouseEvent) {
+    const el = e.target as HTMLElement;
+    drawEffect(e.clientX, e.clientY, el);
+}
+
+function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     cursorPosition.x = mouseX;
     cursorPosition.y = mouseY;
     hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    const isHoverReveal = revealItemsMap.has(hoverEl);
-    const hoverRevealConfig = isHoverReveal ?  getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
+    let isHoverReveal = revealItemsMap.has(hoverEl);
+    const effectItems: RevealItem[] = [];
+    const hoverRevealConfig = isHoverReveal ? getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
+    const { borderColor, transparentColor } = getMiddleColors(revealConfig.hoverColor);
 
     const effectLeft = mouseX - hoverRevealConfig.hoverSize;
     const effectTop = mouseY - hoverRevealConfig.hoverSize;
@@ -128,18 +148,26 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         right: effectLeft + effectSize,
         bottom: effectTop + effectSize
     } as DOMRect;
+    revealItemsMap.forEach(revealItem => {
+        if (revealItem.element) {
+            const rect = revealItem.element.getBoundingClientRect() as DOMRect;
+            if (isRectangleOverlap(effectRect, rect)) {
+                effectItems.push(revealItem);
+            }
+        }
+    });
 
     function drawHoverCircle(ctx: CanvasRenderingContext2D, draw2border = false) {
         const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, hoverRevealConfig.hoverSize)
-        
+
         if (draw2border) {
-            gradient.addColorStop(0, revealConfig.hoverColor);
+            gradient.addColorStop(0, borderColor);
             gradient.addColorStop(1, transparentColor);
         } else {
-            gradient.addColorStop(0, hoverMiddleColor2);
+            gradient.addColorStop(0, revealConfig.hoverColor);
             gradient.addColorStop(1, transparentColor);
         }
-        
+
         ctx.fillStyle = gradient;
         ctx.fillRect(mouseX - hoverRevealConfig.hoverSize, mouseY - hoverRevealConfig.hoverSize, mouseX + hoverRevealConfig.hoverSize, mouseY + hoverRevealConfig.hoverSize);
     }
@@ -159,23 +187,13 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
     // draw border effect.
     function drawBorder() {
-        const effectItems: RevealItem[] = [];
-        revealItemsMap.forEach(revealItem => {
-            if (revealItem.element) {
-                const rect = revealItem.element.getBoundingClientRect() as DOMRect;
-                if (isRectangleOverlap(effectRect, rect)) {
-                    effectItems.push(revealItem);
-                }
-            }
-            // effectItems.push(revealItem);
-        });
 
         function drawAllRevealBorders() {
             effectItems.forEach(revealItem => {
                 const element = revealItem.element;
                 if (!element) return;
                 const rect = element.getBoundingClientRect() as DOMRect;
-                const elBorderWidth = window.getComputedStyle(hoverEl).borderWidth as string;
+                const elBorderWidth = window.getComputedStyle(element).borderWidth as string;
                 const currRevealConfig = getRevealConfig(revealItem);
                 const borderWidth = Number(elBorderWidth.replace("px", "")) || currRevealConfig.borderWidth;
 
@@ -184,10 +202,10 @@ function drawEffects(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                 borderCtx.strokeStyle = "#fff";
                 if (borderWidth || currRevealConfig.borderType === "inside") {
                     // draw inside border.
-                    borderCtx.strokeRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth);
+                    borderCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
                 } else {
                     // draw outside border.
-                    borderCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                    borderCtx.strokeRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth);
                 }
             });
         }
@@ -220,53 +238,32 @@ function clearCanvas() {
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 }
 
-function handleMouseMove(e: MouseEvent) {
-    const el = e.target as HTMLElement;
-    drawEffects(e.clientX, e.clientY, el);
-
-    // if (el && revealItemsMap.has(el)) {
-    //     drawEffects(e.clientX, e.clientY, el);
-    // } else {
-    //     let isInsideEl = false;
-    //     for (const revealItem of revealItemsMap) {
-    //         if (revealItem[0] && revealItem[0].contains(el)) {
-    //             isInsideEl = true;
-    //             drawEffects(e.clientX, e.clientY, revealItem[0]);
-    //             break;
-    //         }
-    //     }
-    //     if (!isInsideEl) {
-    //         clearCanvas();
-    //     }
-    // }
-}
-
-function checkCanvasCreated() {
-    if (!hoverCanvas || !borderCanvas) {
-        initRevealEffect();
+function checkEffectCreated() {
+    if (![hoverCanvas, borderCanvas, hoverCtx, borderCtx].every(v => Boolean(v))) {
+        createEffect();
     }
 }
 
 function addRevealItem(revealItem: RevealItem) {
-    checkCanvasCreated();
+    checkEffectCreated();
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
 function addRevealItems(revealItems: RevealItem[]) {
-    checkCanvasCreated();
+    checkEffectCreated();
     revealItems.forEach(revealItem => {
         revealItemsMap.set(revealItem.element, revealItem);
     });
 }
 
 function addRevealEl(element: HTMLElement) {
-    checkCanvasCreated();
+    checkEffectCreated();
     const revealItem = { element };
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
 function addRevealEls(elements: HTMLElement[]) {
-    checkCanvasCreated();
+    checkEffectCreated();
     elements.forEach(element => {
         const revealItem = { element };
         revealItemsMap.set(revealItem.element, revealItem);
@@ -277,22 +274,37 @@ function clearRevealItems() {
     revealItemsMap.clear();
 }
 
-function setMiddleColors(hoverColor = revealConfig.hoverColor) {
+function getMiddleColors(hoverColor = revealConfig.hoverColor) {
     const { h, s, l, a } = tinyColor(hoverColor).toHsl();
-    hoverMiddleColor1 = tinyColor({ h, s, l, a: a / 4 }).toRgbString();
-    hoverMiddleColor2 = tinyColor({ h, s, l, a: a / 8 }).toRgbString();
-    transparentColor = tinyColor({ h, s, l, a: 0 }).toRgbString();
+    let borderColor = tinyColor({ h, s, l, a: a + .3 }).toRgbString();
+    let transparentColor = tinyColor({ h, s, l, a: 0 }).toRgbString();
+
+    return { borderColor, transparentColor };
 }
 
-function setRevealConfig(newConfig: RevalConfig) {
-    setMiddleColors(newConfig.hoverColor);
+function getRevealConfig(config: RevalConfig) {
+    return {
+        hoverSize: config.hoverSize === void 0 ? revealConfig.hoverSize : config.hoverSize,
+        borderWidth: config.borderWidth === void 0 ? revealConfig.borderWidth : config.borderWidth,
+        effectEnable: config.effectEnable === void 0 ? revealConfig.effectEnable : config.effectEnable,
+        borderType: config.borderType === void 0 ? revealConfig.borderType : config.borderType,
+        hoverColor: config.hoverColor === void 0 ? revealConfig.hoverColor : config.hoverColor,
+        zIndex: config.zIndex === void 0 ? revealConfig.zIndex : config.zIndex
+    } as Required<RevalConfig>;
+}
+
+function setRevealConfig(config: RevalConfig) {
+    const newConfig = getRevealConfig(config);
+    const middleColors = getMiddleColors(newConfig.hoverColor);
+    borderColor = middleColors.borderColor;
+    transparentColor = middleColors.transparentColor;
 
     Object.assign(revealConfig, newConfig);
 }
 
 
 export {
-    initRevealEffect,
+    createEffect as initRevealEffect,
     clearCanvas,
     handleMouseMove,
     addRevealItem,
