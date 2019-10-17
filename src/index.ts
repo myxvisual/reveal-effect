@@ -29,6 +29,11 @@ function isInside(position: { left: number; top: number}, rect: DOMRect) {
     return (position.left > rect.left && position.left < rect.right && position.top > rect.top && position.top < rect.bottom);
 }
 
+interface ColorMiddle {
+    borderColor: string;
+    hoverEndColor: string;
+}
+type ColorMiddlewareFunc = (hoverColor?: string) => ColorMiddle;
 export interface RevalConfig {
     borderWidth?: number;
     hoverSize?: number;
@@ -36,6 +41,7 @@ export interface RevalConfig {
     borderType?: "inside" | "outside";
     hoverColor?: string;
     zIndex?: number;
+    colorMiddleware?: ColorMiddlewareFunc;
 }
 
 export interface CircleGradient {
@@ -68,7 +74,13 @@ const revealConfig: Required<RevalConfig> = {
     borderWidth: 2,
     effectEnable: "both",
     borderType: "inside",
-    zIndex: 9999
+    zIndex: 9999,
+    colorMiddleware: (hoverColor?: string) => {
+        const { h, s, l, a } = tinyColor(hoverColor).toHsl();
+        let borderColor = tinyColor({ h, s, l, a: a + .4 }).toRgbString() as string;
+        let hoverEndColor = tinyColor({ h, s, l, a: 0 }).toRgbString() as string;
+        return { borderColor, hoverEndColor };
+    }
 };
 
 function createCanvas() {
@@ -167,7 +179,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         isHoverReveal = revealItemsMap.has(hoverEl);
     }
     const hoverRevealConfig = isHoverReveal ? getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
-    const { borderColor, transparentColor } = getMiddleColors(hoverRevealConfig.hoverColor);
+    const { borderColor, hoverEndColor } = hoverRevealConfig.colorMiddleware(hoverRevealConfig.hoverColor);
 
     const effectLeft = mouseX - hoverRevealConfig.hoverSize;
     const effectTop = mouseY - hoverRevealConfig.hoverSize;
@@ -191,12 +203,13 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     function drawHoverCircle(ctx: CanvasRenderingContext2D, draw2border = false) {
         const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, hoverRevealConfig.hoverSize)
 
+        const transparentColor = "rgba(0, 0, 0, 0)";
         if (draw2border) {
             gradient.addColorStop(0, borderColor);
             gradient.addColorStop(1, transparentColor);
         } else {
             gradient.addColorStop(0, hoverRevealConfig.hoverColor);
-            gradient.addColorStop(1, transparentColor);
+            gradient.addColorStop(1, hoverEndColor);
         }
 
         ctx.fillStyle = gradient;
@@ -211,8 +224,12 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     // inside hover effect.
     function drawHover() {
         if (isHoverReveal) {
+    
             hoverCtx.globalCompositeOperation = "source-over";
-            hoverCtx.fillStyle = hoverRevealConfig.hoverColor;
+            drawHoverCircle(hoverCtx);
+
+            hoverCtx.globalCompositeOperation = "destination-in";
+            hoverCtx.fillStyle = "#fff";
             const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
             if (hoverBorderRadius) {
                 roundRect(hoverCtx, hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height, hoverBorderRadius);
@@ -220,9 +237,6 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
             } else {
                 hoverCtx.fillRect(hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height);
             }
-    
-            hoverCtx.globalCompositeOperation = "destination-in";
-            drawHoverCircle(hoverCtx);
         }
     }
 
@@ -233,7 +247,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                 const element = revealItem.element;
                 if (!element) return;
                 const currRevealConfig = getRevealConfig(revealItem);
-                const { borderColor } = getMiddleColors(currRevealConfig.hoverColor);
+                const { borderColor } = currRevealConfig.colorMiddleware(currRevealConfig.hoverColor);
                 const rect = element.getBoundingClientRect() as DOMRect;
                 const computedStyle = window.getComputedStyle(element);
                 const elBorderWidth = computedStyle.borderWidth as string;
@@ -329,14 +343,6 @@ function clearRevealItems() {
     revealItemsMap.clear();
 }
 
-function getMiddleColors(hoverColor = revealConfig.hoverColor) {
-    const { h, s, l, a } = tinyColor(hoverColor).toHsl();
-    let borderColor = tinyColor({ h, s, l, a: a + .5 }).toRgbString();
-    let transparentColor = tinyColor({ h, s, l, a: 0 }).toRgbString();
-
-    return { borderColor, transparentColor };
-}
-
 function getRevealConfig(config: RevalConfig) {
     return {
         hoverSize: config.hoverSize === void 0 ? revealConfig.hoverSize : config.hoverSize,
@@ -344,7 +350,8 @@ function getRevealConfig(config: RevalConfig) {
         effectEnable: config.effectEnable === void 0 ? revealConfig.effectEnable : config.effectEnable,
         borderType: config.borderType === void 0 ? revealConfig.borderType : config.borderType,
         hoverColor: config.hoverColor === void 0 ? revealConfig.hoverColor : config.hoverColor,
-        zIndex: config.zIndex === void 0 ? revealConfig.zIndex : config.zIndex
+        zIndex: config.zIndex === void 0 ? revealConfig.zIndex : config.zIndex,
+        colorMiddleware: config.colorMiddleware === void 0 ? revealConfig.colorMiddleware : config.colorMiddleware
     } as Required<RevalConfig>;
 }
 
