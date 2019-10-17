@@ -262,9 +262,8 @@ function addRevealEl(element: HTMLElement) {
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
-function addRevealEls(elements: HTMLElement[]) {
-    checkEffectCreated();
-    elements.forEach(element => {
+function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
+    elements.forEach((element: HTMLElement) => {
         const revealItem = { element };
         revealItemsMap.set(revealItem.element, revealItem);
     });
