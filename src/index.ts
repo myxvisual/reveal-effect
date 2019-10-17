@@ -10,7 +10,6 @@ function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
 
-
  function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
     if (w < 2 * r) r = w / 2;
     if (h < 2 * r) r = h / 2;
@@ -71,7 +70,6 @@ const revealConfig: Required<RevalConfig> = {
     borderType: "inside",
     zIndex: 9999
 };
-let { borderColor, transparentColor } = getMiddleColors(revealConfig.hoverColor);
 
 function createCanvas() {
     hoverCanvas = document.createElement("canvas");
@@ -169,7 +167,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         isHoverReveal = revealItemsMap.has(hoverEl);
     }
     const hoverRevealConfig = isHoverReveal ? getRevealConfig(revealItemsMap.get(hoverEl) as RevealItem) : revealConfig;
-    const { borderColor, transparentColor } = getMiddleColors(revealConfig.hoverColor);
+    const { borderColor, transparentColor } = getMiddleColors(hoverRevealConfig.hoverColor);
 
     const effectLeft = mouseX - hoverRevealConfig.hoverSize;
     const effectTop = mouseY - hoverRevealConfig.hoverSize;
@@ -197,12 +195,12 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
             gradient.addColorStop(0, borderColor);
             gradient.addColorStop(1, transparentColor);
         } else {
-            gradient.addColorStop(0, revealConfig.hoverColor);
+            gradient.addColorStop(0, hoverRevealConfig.hoverColor);
             gradient.addColorStop(1, transparentColor);
         }
 
         ctx.fillStyle = gradient;
-        ctx.fillRect(mouseX - hoverRevealConfig.hoverSize, mouseY - hoverRevealConfig.hoverSize, mouseX + hoverRevealConfig.hoverSize, mouseY + hoverRevealConfig.hoverSize);
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     }
 
     let hoverBorderRadius: number;
@@ -214,7 +212,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     function drawHover() {
         if (isHoverReveal) {
             hoverCtx.globalCompositeOperation = "source-over";
-            hoverCtx.fillStyle = "#fff";
+            hoverCtx.fillStyle = hoverRevealConfig.hoverColor;
             const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
             if (hoverBorderRadius) {
                 roundRect(hoverCtx, hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height, hoverBorderRadius);
@@ -235,6 +233,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                 const element = revealItem.element;
                 if (!element) return;
                 const currRevealConfig = getRevealConfig(revealItem);
+                const { borderColor } = getMiddleColors(currRevealConfig.hoverColor);
                 const rect = element.getBoundingClientRect() as DOMRect;
                 const computedStyle = window.getComputedStyle(element);
                 const elBorderWidth = computedStyle.borderWidth as string;
@@ -244,7 +243,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
                 borderCtx.globalCompositeOperation = "source-over";
                 borderCtx.lineWidth = borderWidth;
-                borderCtx.strokeStyle = "#fff";
+                borderCtx.strokeStyle = borderColor;
                 if (borderWidth || currRevealConfig.borderType === "inside") {
                     // draw inside border.
                     if (borderRadius) {
@@ -293,26 +292,28 @@ function clearCanvas() {
     borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 }
 
-function checkEffectCreated() {
-    if (![hoverCanvas, borderCanvas, hoverCtx, borderCtx].every(v => Boolean(v))) {
+function isCanvasCreated() {
+    const isCreated = [hoverCanvas, borderCanvas, hoverCtx, borderCtx].every(v => Boolean(v));
+    if (!isCreated) {
         createEffect();
     }
+    return  isCreated;
 }
 
 function addRevealItem(revealItem: RevealItem) {
-    checkEffectCreated();
+    isCanvasCreated();
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
 function addRevealItems(revealItems: RevealItem[]) {
-    checkEffectCreated();
+    isCanvasCreated();
     revealItems.forEach(revealItem => {
         revealItemsMap.set(revealItem.element, revealItem);
     });
 }
 
 function addRevealEl(element: HTMLElement) {
-    checkEffectCreated();
+    isCanvasCreated();
     const revealItem = { element };
     revealItemsMap.set(revealItem.element, revealItem);
 }
@@ -330,7 +331,7 @@ function clearRevealItems() {
 
 function getMiddleColors(hoverColor = revealConfig.hoverColor) {
     const { h, s, l, a } = tinyColor(hoverColor).toHsl();
-    let borderColor = tinyColor({ h, s, l, a: a + .3 }).toRgbString();
+    let borderColor = tinyColor({ h, s, l, a: a + .5 }).toRgbString();
     let transparentColor = tinyColor({ h, s, l, a: 0 }).toRgbString();
 
     return { borderColor, transparentColor };
@@ -349,11 +350,10 @@ function getRevealConfig(config: RevalConfig) {
 
 function setRevealConfig(config: RevalConfig) {
     const newConfig = getRevealConfig(config);
-    const middleColors = getMiddleColors(newConfig.hoverColor);
-    borderColor = middleColors.borderColor;
-    transparentColor = middleColors.transparentColor;
-
     Object.assign(revealConfig, newConfig);
+    if (isCanvasCreated()) {
+        updateCanvas();
+    }
 }
 
 
