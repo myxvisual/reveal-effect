@@ -13,11 +13,10 @@ const revealStore: RevealStore = {
     hoverCtx: null,
     borderCtx: null,
 } as any;
-let revealItemsMap = new Map<HTMLElement, RevealItem>();
+const revealItemsMap = new Map<HTMLElement, RevealItem>();
 
-// TODO: Border not cover all element.
 // TODO: Overflow not supported.
-// TODO: DOM removed not supported.
+
 /**
  * Detect rectangle is overlap.
  * @param rect1 - DOMRect
@@ -364,16 +363,21 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 }
 
 function clearCanvas() {
-    revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    if (isCanvasCreated()) {
+        revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+    revealItemsMap.clear();
 }
 
 function isCanvasCreated() {
-    const isCreated = [revealStore.hoverCanvas, revealStore.borderCanvas, revealStore.hoverCtx, revealStore.borderCtx].every(v => Boolean(v));
-    if (!isCreated) {
+    return revealStore.hoverCanvas && revealStore.borderCanvas && revealStore.hoverCtx && revealStore.borderCtx;
+}
+
+function checkAndCreateCanvas() {
+    if (!isCanvasCreated()) {
         createCanvas();
     }
-    return isCreated;
 }
 
 /**
@@ -381,8 +385,10 @@ function isCanvasCreated() {
  * @param revealItem - RevealItem
  */
 function addRevealItem(revealItem: RevealItem) {
-    isCanvasCreated();
-    revealItemsMap.set(revealItem.element, revealItem);
+    checkAndCreateCanvas();
+    if (revealItem.element) {
+        revealItemsMap.set(revealItem.element, revealItem);
+    }
 }
 
 /**
@@ -390,9 +396,11 @@ function addRevealItem(revealItem: RevealItem) {
  * @param revealItems - RevealItem[]
  */
 function addRevealItems(revealItems: RevealItem[]) {
-    isCanvasCreated();
+    checkAndCreateCanvas();
     revealItems.forEach(revealItem => {
-        revealItemsMap.set(revealItem.element, revealItem);
+        if (revealItem.element) {
+            revealItemsMap.set(revealItem.element, revealItem);
+        }
     });
 }
 
@@ -401,9 +409,11 @@ function addRevealItems(revealItems: RevealItem[]) {
  * @param element - HTMLElement
  */
 function addRevealEl(element: HTMLElement) {
-    isCanvasCreated();
-    const revealItem = { element };
-    revealItemsMap.set(revealItem.element, revealItem);
+    checkAndCreateCanvas();
+    if (element) {
+        const revealItem = { element };
+        revealItemsMap.set(element, revealItem);
+    }
 }
 
 /**
@@ -411,10 +421,41 @@ function addRevealEl(element: HTMLElement) {
  * @param elements - HTMLElement[] | NodeListOf<HTMLElement>
  */
 function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
+    checkAndCreateCanvas();
     elements.forEach((element: HTMLElement) => {
-        const revealItem = { element };
-        revealItemsMap.set(revealItem.element, revealItem);
+        if (element) {
+            const revealItem = { element };
+            revealItemsMap.set(element, revealItem);
+        }
     });
+}
+
+/**
+ * Clear all reveal effect element.
+ */
+function clearRevealEl(element: HTMLElement) {
+    if (revealItemsMap.has(element)) {
+        revealItemsMap.delete(element);
+    }
+    clearCanvas();
+}
+
+/**
+ * Clear all reveal effect item.
+ */
+function clearRevealItem(revealItem: RevealItem) {
+    if (revealItemsMap.has(revealItem.element)) {
+        revealItemsMap.delete(revealItem.element);
+    }
+    clearCanvas();
+}
+
+/**
+ * Clear all reveal effect elements.
+ */
+function clearRevealEls() {
+    revealItemsMap.clear();
+    clearCanvas();
 }
 
 /**
@@ -422,6 +463,7 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
  */
 function clearRevealItems() {
     revealItemsMap.clear();
+    clearCanvas();
 }
 
 function getRevealConfig(config: RevalConfig) {
@@ -439,20 +481,21 @@ function getRevealConfig(config: RevalConfig) {
 function setRevealConfig(config: RevalConfig) {
     const newConfig = getRevealConfig(config);
     Object.assign(revealConfig, newConfig);
-    if (isCanvasCreated()) {
-        updateCanvas();
-    }
+    checkAndCreateCanvas();
+    updateCanvas();
 }
-
 
 export {
     createCanvas,
     clearCanvas,
     handleMouseMove,
     addRevealItem,
+    clearRevealItem,
     addRevealItems,
-    addRevealEl,
-    addRevealEls,
     clearRevealItems,
+    addRevealEl,
+    clearRevealEl,
+    addRevealEls,
+    clearRevealEls,
     setRevealConfig
 }
