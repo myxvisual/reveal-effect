@@ -10,7 +10,7 @@ function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
 
- function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
     if (w < 2 * r) r = w / 2;
     if (h < 2 * r) r = h / 2;
 
@@ -29,18 +29,29 @@ function isInside(position: { left: number; top: number}, rect: DOMRect) {
     return (position.left > rect.left && position.left < rect.right && position.top > rect.top && position.top < rect.bottom);
 }
 
-interface ColorMiddle {
+interface MiddleColor {
     borderColor: string;
     hoverEndColor: string;
 }
-type ColorMiddlewareFunc = (hoverColor?: string) => ColorMiddle;
+
+/** ColorMiddleware function. */
+type ColorMiddlewareFunc = (hoverColor?: string) => MiddleColor;
+
+/** Set reveal effect config. */
 export interface RevalConfig {
+    /** Set hover borderWidth. */
     borderWidth?: number;
+    /** Set hover size. */
     hoverSize?: number;
+    /** Set effectEnable type, default is both. */
     effectEnable?: "hover" | "border" | "both";
+    /** Set borderType, default is inside. */
     borderType?: "inside" | "outside";
+    /** Set hoverColor. */
     hoverColor?: string;
+    /** Set canvas zIndex. */
     zIndex?: number;
+    /** Set colorMiddleware function. */
     colorMiddleware?: ColorMiddlewareFunc;
 }
 
@@ -83,6 +94,7 @@ const revealConfig: Required<RevalConfig> = {
     }
 };
 
+/** Create reveal effect method. */
 function createCanvas() {
     hoverCanvas = document.createElement("canvas");
     borderCanvas = document.createElement("canvas");
@@ -90,6 +102,8 @@ function createCanvas() {
     document.body.appendChild(borderCanvas);
     hoverCtx = hoverCanvas.getContext("2d") as CanvasRenderingContext2D;
     borderCtx = borderCanvas.getContext("2d") as CanvasRenderingContext2D;
+
+    updateCanvas();
 }
 
 function updateCanvas() {
@@ -119,18 +133,13 @@ function updateCanvas() {
         width: window.innerWidth,
         height: window.innerHeight,
     })
-}
 
-function createEffect() {
-    createCanvas();
-    updateCanvas();
-
-    window.removeEventListener("scroll", handleScroll, true);
-    window.addEventListener("scroll", handleScroll, true);
-    window.removeEventListener("resize", updateCanvas, true);
-    window.addEventListener("resize", updateCanvas, true);
-    window.removeEventListener("mousemove", handleMouseMove, true);
-    window.addEventListener("mousemove", handleMouseMove, true);
+    window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    window.removeEventListener("resize", updateCanvas);
+    window.addEventListener("resize", updateCanvas);
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove);
 }
 
 function handleScroll(e: Event) {
@@ -309,9 +318,9 @@ function clearCanvas() {
 function isCanvasCreated() {
     const isCreated = [hoverCanvas, borderCanvas, hoverCtx, borderCtx].every(v => Boolean(v));
     if (!isCreated) {
-        createEffect();
+        createCanvas();
     }
-    return  isCreated;
+    return isCreated;
 }
 
 function addRevealItem(revealItem: RevealItem) {
@@ -365,7 +374,7 @@ function setRevealConfig(config: RevalConfig) {
 
 
 export {
-    createEffect as initRevealEffect,
+    createCanvas,
     clearCanvas,
     handleMouseMove,
     addRevealItem,
