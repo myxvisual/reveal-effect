@@ -1,11 +1,23 @@
 import tinyColor from "tinycolor2";
 
-let hoverCanvas: HTMLCanvasElement;
-let borderCanvas: HTMLCanvasElement;
-let hoverCtx: CanvasRenderingContext2D;
-let borderCtx: CanvasRenderingContext2D;
+interface RevealStore {
+    hoverCanvas: HTMLCanvasElement;
+    borderCanvas: HTMLCanvasElement;
+    hoverCtx: CanvasRenderingContext2D;
+    borderCtx: CanvasRenderingContext2D;
+}
+
+const revealStore: RevealStore = {
+    hoverCanvas: null,
+    borderCanvas: null,
+    hoverCtx: null,
+    borderCtx: null,
+} as any;
 let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
+// TODO: Border not cover all element.
+// TODO: Overflow not supported.
+// TODO: DOM removed not supported.
 /**
  * Detect rectangle is overlap.
  * @param rect1 - DOMRect
@@ -123,18 +135,27 @@ const revealConfig: Required<RevalConfig> = {
 
 /** Create reveal effect method. */
 function createCanvas() {
-    hoverCanvas = document.createElement("canvas");
-    borderCanvas = document.createElement("canvas");
-    document.body.appendChild(hoverCanvas);
-    document.body.appendChild(borderCanvas);
-    hoverCtx = hoverCanvas.getContext("2d") as CanvasRenderingContext2D;
-    borderCtx = borderCanvas.getContext("2d") as CanvasRenderingContext2D;
+    revealStore.hoverCanvas = document.createElement("canvas");
+    revealStore.borderCanvas = document.createElement("canvas");
+    document.body.appendChild(revealStore.hoverCanvas);
+    document.body.appendChild(revealStore.borderCanvas);
+    revealStore.hoverCtx = revealStore.hoverCanvas.getContext("2d") as CanvasRenderingContext2D;
+    revealStore.borderCtx = revealStore.borderCanvas.getContext("2d") as CanvasRenderingContext2D;
 
     updateCanvas();
 }
 
+function removeCanvas() {
+    document.body.removeChild(revealStore.hoverCanvas);
+    document.body.removeChild(revealStore.borderCanvas);
+    delete revealStore.hoverCanvas;
+    delete revealStore.borderCanvas;
+    delete revealStore.hoverCtx;
+    delete revealStore.borderCtx;
+}
+
 function updateCanvas() {
-    Object.assign(hoverCanvas.style, {
+    Object.assign(revealStore.hoverCanvas.style, {
         width: `${window.innerWidth}px`,
         height: `${window.innerHeight}px`,
         position: "fixed",
@@ -143,7 +164,7 @@ function updateCanvas() {
         pointerEvents: "none",
         zIndex: revealConfig.zIndex
     });
-    Object.assign(borderCanvas.style, {
+    Object.assign(revealStore.borderCanvas.style, {
         width: `${window.innerWidth}px`,
         height: `${window.innerHeight}px`,
         position: "fixed",
@@ -152,11 +173,11 @@ function updateCanvas() {
         pointerEvents: "none",
         zIndex: revealConfig.zIndex
     });
-    Object.assign(hoverCanvas, {
+    Object.assign(revealStore.hoverCanvas, {
         width: window.innerWidth,
         height: window.innerHeight,
     })
-    Object.assign(borderCanvas, {
+    Object.assign(revealStore.borderCanvas, {
         width: window.innerWidth,
         height: window.innerHeight,
     })
@@ -206,8 +227,8 @@ function getHoverParentEl(hoverEl: HTMLElement) {
 function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     currMousePosition.x = mouseX;
     currMousePosition.y = mouseY;
-    hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
     let isHoverReveal = revealItemsMap.has(hoverEl);
     if (!isHoverReveal) {
@@ -261,17 +282,17 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     function drawHover() {
         if (isHoverReveal) {
     
-            hoverCtx.globalCompositeOperation = "source-over";
-            drawHoverCircle(hoverCtx);
+            revealStore.hoverCtx.globalCompositeOperation = "source-over";
+            drawHoverCircle(revealStore.hoverCtx);
 
-            hoverCtx.globalCompositeOperation = "destination-in";
-            hoverCtx.fillStyle = "#fff";
+            revealStore.hoverCtx.globalCompositeOperation = "destination-in";
+            revealStore.hoverCtx.fillStyle = "#fff";
             const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
             if (hoverBorderRadius) {
-                roundRect(hoverCtx, hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height, hoverBorderRadius);
-                hoverCtx.fill();
+                roundRect(revealStore.hoverCtx, hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height, hoverBorderRadius);
+                revealStore.hoverCtx.fill();
             } else {
-                hoverCtx.fillRect(hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height);
+                revealStore.hoverCtx.fillRect(hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height);
             }
         }
     }
@@ -288,27 +309,32 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                 const computedStyle = window.getComputedStyle(element);
                 const elBorderWidth = computedStyle.borderWidth as string;
                 const elBorderRadius = computedStyle.borderRadius as string;
-                const borderWidth = Number(elBorderWidth.replace("px", "")) || currRevealConfig.borderWidth;
+                let borderWidth = Number(elBorderWidth.replace("px", ""));
                 const borderRadius = Number(elBorderRadius.replace("px", ""));
 
-                borderCtx.globalCompositeOperation = "source-over";
-                borderCtx.lineWidth = borderWidth;
-                borderCtx.strokeStyle = borderColor;
+                revealStore.borderCtx.globalCompositeOperation = "source-over";
+                revealStore.borderCtx.strokeStyle = borderColor;
                 if (borderWidth || currRevealConfig.borderType === "inside") {
                     // draw inside border.
+                    if (!borderWidth) borderWidth = currRevealConfig.borderWidth;
+                    const halfBorderWidth = borderWidth / 2;
+                    revealStore.borderCtx.lineWidth = borderWidth;
                     if (borderRadius) {
-                        roundRect(borderCtx, rect.x, rect.y, rect.width, rect.height, borderRadius);
-                        borderCtx.stroke();
+                        roundRect(revealStore.borderCtx, rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth, borderRadius);
+                        revealStore.borderCtx.stroke();
                     } else {
-                        borderCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                        revealStore.borderCtx.strokeRect(rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth);
                     }
                 } else {
                     // draw outside border.
+                    borderWidth = currRevealConfig.borderWidth;
+                    const halfBorderWidth = borderWidth / 2;
+                    revealStore.borderCtx.lineWidth = borderWidth;
                     if (borderRadius) {
-                        roundRect(borderCtx, rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth, borderRadius);
-                        borderCtx.stroke();
+                        roundRect(revealStore.borderCtx, rect.x - halfBorderWidth, rect.y - halfBorderWidth, rect.width + borderWidth, rect.height + borderWidth, borderRadius);
+                        revealStore.borderCtx.stroke();
                     } else {
-                        borderCtx.strokeRect(rect.x - borderWidth, rect.y - borderWidth, rect.width + borderWidth, rect.height + borderWidth);
+                        revealStore.borderCtx.strokeRect(rect.x - halfBorderWidth, rect.y - halfBorderWidth, rect.width + borderWidth, rect.height + borderWidth);
                     }
                 }
             });
@@ -316,8 +342,8 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
         drawAllRevealBorders();
         // make border mask.
-        borderCtx.globalCompositeOperation = "destination-in";
-        drawHoverCircle(borderCtx, true);
+        revealStore.borderCtx.globalCompositeOperation = "destination-in";
+        drawHoverCircle(revealStore.borderCtx, true);
     }
 
     switch (hoverRevealConfig.effectEnable) {
@@ -338,12 +364,12 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 }
 
 function clearCanvas() {
-    hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 }
 
 function isCanvasCreated() {
-    const isCreated = [hoverCanvas, borderCanvas, hoverCtx, borderCtx].every(v => Boolean(v));
+    const isCreated = [revealStore.hoverCanvas, revealStore.borderCanvas, revealStore.hoverCtx, revealStore.borderCtx].every(v => Boolean(v));
     if (!isCreated) {
         createCanvas();
     }
