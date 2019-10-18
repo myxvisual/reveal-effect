@@ -6,10 +6,24 @@ let hoverCtx: CanvasRenderingContext2D;
 let borderCtx: CanvasRenderingContext2D;
 let revealItemsMap = new Map<HTMLElement, RevealItem>();
 
+/**
+ * Detect rectangle is overlap.
+ * @param rect1 - DOMRect
+ * @param rect2 - DOMRect
+ */
 function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
 
+/**
+ * Draw round rect to canvas context.
+ * @param ctx - CanvasRenderingContext2D
+ * @param x - number
+ * @param y - number
+ * @param w - number
+ * @param h - number
+ * @param r - number
+ */
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
     if (w < 2 * r) r = w / 2;
     if (h < 2 * r) r = h / 2;
@@ -25,7 +39,12 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
     return ctx;
 }
 
-function isInside(position: { left: number; top: number}, rect: DOMRect) {
+/**
+ * Detect cursor is inside to rect.
+ * @param position The mouse cursor position.
+ * @param rect The DOMRect.
+ */
+function isRectInside(position: { left: number; top: number}, rect: DOMRect) {
     return (position.left > rect.left && position.left < rect.right && position.top > rect.top && position.top < rect.bottom);
 }
 
@@ -64,6 +83,10 @@ export interface CircleGradient {
     r2: number;
 }
 
+/**
+ * RevealItem interface.
+ * 
+ */
 export interface RevealItem {
     element: HTMLElement;
 
@@ -72,6 +95,10 @@ export interface RevealItem {
     effectEnable?: RevalConfig["effectEnable"];
     borderType?: RevalConfig["borderType"];
     hoverColor?: RevalConfig["hoverColor"];
+
+    /**
+     * zIndex is not supported, only for the type.
+     */
     zIndex?: RevalConfig["zIndex"];
 }
 
@@ -147,7 +174,7 @@ function handleScroll(e: Event) {
     revealItemsMap.forEach(({ element }) => {
         if (element) {
             const rect = element.getBoundingClientRect() as DOMRect;
-            const isInsideEl = isInside({ left: currMousePosition.x, top: currMousePosition.y }, rect);
+            const isInsideEl = isRectInside({ left: currMousePosition.x, top: currMousePosition.y }, rect);
             if (isInsideEl) {
                 if (hoverEl.contains(element)) {
                     hoverEl = element;
@@ -323,11 +350,19 @@ function isCanvasCreated() {
     return isCreated;
 }
 
+/**
+ * Add reveal effect to revealItem.
+ * @param revealItem - RevealItem
+ */
 function addRevealItem(revealItem: RevealItem) {
     isCanvasCreated();
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
+/**
+ * Add reveal effect to revealItem list.
+ * @param revealItems - RevealItem[]
+ */
 function addRevealItems(revealItems: RevealItem[]) {
     isCanvasCreated();
     revealItems.forEach(revealItem => {
@@ -335,12 +370,20 @@ function addRevealItems(revealItems: RevealItem[]) {
     });
 }
 
+/**
+ * Add reveal effect to html element.
+ * @param element - HTMLElement
+ */
 function addRevealEl(element: HTMLElement) {
     isCanvasCreated();
     const revealItem = { element };
     revealItemsMap.set(revealItem.element, revealItem);
 }
 
+/**
+ * Add reveal effect to html element list.
+ * @param elements - HTMLElement[] | NodeListOf<HTMLElement>
+ */
 function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
     elements.forEach((element: HTMLElement) => {
         const revealItem = { element };
@@ -348,6 +391,9 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
     });
 }
 
+/**
+ * Clear all reveal effect items.
+ */
 function clearRevealItems() {
     revealItemsMap.clear();
 }
