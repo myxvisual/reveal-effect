@@ -14,8 +14,7 @@ const revealStore: RevealStore = {
     borderCtx: null,
 } as any;
 const revealItemsMap = new Map<HTMLElement, RevealItem>();
-
-// TODO: Overflow not supported.
+const coverItemsMap = new Map<HTMLElement, boolean>();
 
 /**
  * Detect rectangle is overlap.
@@ -181,8 +180,8 @@ function updateCanvas() {
         height: window.innerHeight,
     })
 
-    window.removeEventListener("scroll", handleScroll);
-    window.addEventListener("scroll", handleScroll);
+    document.removeEventListener("scroll", handleScroll, true);
+    document.addEventListener("scroll", handleScroll, true);
     window.removeEventListener("resize", updateCanvas);
     window.addEventListener("resize", updateCanvas);
     window.removeEventListener("mousemove", handleMouseMove);
@@ -190,7 +189,8 @@ function updateCanvas() {
 }
 
 function handleScroll(e: Event) {
-    let hoverEl = e.target as HTMLElement;
+    let hoverEl = document.body as HTMLElement;
+
     revealItemsMap.forEach(({ element }) => {
         if (element) {
             const rect = element.getBoundingClientRect() as DOMRect;
@@ -230,7 +230,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
     revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
     let isHoverReveal = revealItemsMap.has(hoverEl);
-    if (!isHoverReveal) {
+    if (!isHoverReveal && !coverItemsMap.has(hoverEl)) {
         hoverEl = getHoverParentEl(hoverEl);
         isHoverReveal = revealItemsMap.has(hoverEl);
     }
@@ -246,7 +246,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         right: effectLeft + effectSize,
         bottom: effectTop + effectSize
     } as DOMRect;
-    const effectItems: RevealItem[] = [];
+    let effectItems: RevealItem[] = [];
     revealItemsMap.forEach(revealItem => {
         if (revealItem.element) {
             const rect = revealItem.element.getBoundingClientRect() as DOMRect;
@@ -255,6 +255,8 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
             }
         }
     });
+    // sort effectItems by depth(deeper).
+    effectItems = effectItems.sort((a, b) => a.element.compareDocumentPosition(b.element) & 2 ? -1 : 1);
 
     function drawHoverCircle(ctx: CanvasRenderingContext2D, draw2border = false) {
         const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, hoverRevealConfig.hoverSize)
@@ -277,10 +279,10 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         const elBorderRadius = window.getComputedStyle(hoverEl).borderRadius as string;
         hoverBorderRadius = Number(elBorderRadius.replace("px", ""));
     }
+
     // inside hover effect.
     function drawHover() {
         if (isHoverReveal) {
-    
             revealStore.hoverCtx.globalCompositeOperation = "source-over";
             drawHoverCircle(revealStore.hoverCtx);
 
@@ -336,6 +338,17 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                         revealStore.borderCtx.strokeRect(rect.x - halfBorderWidth, rect.y - halfBorderWidth, rect.width + borderWidth, rect.height + borderWidth);
                     }
                 }
+
+                const parentEl = element.parentElement as HTMLElement;
+                if (coverItemsMap.has(parentEl)) {
+                    const rect = parentEl.getBoundingClientRect() as DOMRect;
+                    revealStore.borderCtx.globalCompositeOperation = "destination-in";
+                    revealStore.hoverCtx.globalCompositeOperation = "destination-in";
+                    revealStore.borderCtx.fillStyle = "#fff";
+                    revealStore.hoverCtx.fillStyle = "#fff";
+                    revealStore.borderCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                    revealStore.hoverCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                }
             });
         }
 
@@ -355,8 +368,8 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
             break;
         }
         default: {
-            drawHover();
             drawBorder();
+            drawHover();
             break;
         }
     }
@@ -386,8 +399,12 @@ function checkAndCreateCanvas() {
  */
 function addRevealItem(revealItem: RevealItem) {
     checkAndCreateCanvas();
-    if (revealItem.element) {
-        revealItemsMap.set(revealItem.element, revealItem);
+    const { element } = revealItem;
+    if (element) {
+        revealItemsMap.set(element, revealItem);
+        if (element.parentElement) {
+            coverItemsMap.set(element.parentElement as HTMLElement, true);
+        }
     }
 }
 
@@ -398,8 +415,12 @@ function addRevealItem(revealItem: RevealItem) {
 function addRevealItems(revealItems: RevealItem[]) {
     checkAndCreateCanvas();
     revealItems.forEach(revealItem => {
-        if (revealItem.element) {
-            revealItemsMap.set(revealItem.element, revealItem);
+        const { element } = revealItem;
+        if (element) {
+            revealItemsMap.set(element, revealItem);
+            if (element.parentElement) {
+                coverItemsMap.set(element.parentElement as HTMLElement, true);
+            }
         }
     });
 }
@@ -413,6 +434,9 @@ function addRevealEl(element: HTMLElement) {
     if (element) {
         const revealItem = { element };
         revealItemsMap.set(element, revealItem);
+        if (element.parentElement) {
+            coverItemsMap.set(element.parentElement as HTMLElement, true);
+        }
     }
 }
 
@@ -426,6 +450,23 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
         if (element) {
             const revealItem = { element };
             revealItemsMap.set(element, revealItem);
+            if (element.parentElement) {
+                coverItemsMap.set(element.parentElement as HTMLElement, true);
+            }
+        }
+    });
+}
+
+function addCoverEl(element: HTMLElement) {
+    if (element) {
+        coverItemsMap.set(element, true);
+    }
+}
+
+function addCoverEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
+    elements.forEach((element: HTMLElement) => {
+        if (element) {
+            coverItemsMap.set(element, true);
         }
     });
 }
@@ -497,5 +538,7 @@ export {
     clearRevealEl,
     addRevealEls,
     clearRevealEls,
+    addCoverEl,
+    addCoverEls,
     setRevealConfig
 }
