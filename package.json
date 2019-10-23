@@ -25,11 +25,11 @@
   },
   "types": "build/index.d.ts",
   "devDependencies": {
+    "@types/node": "^12.11.5",
     "@types/tinycolor2": "^1.4.2",
     "typescript": "^3.6.4"
   },
   "dependencies": {
-    "@types/node": "^12.11.2",
     "tinycolor2": "^1.4.1"
   }
 }
