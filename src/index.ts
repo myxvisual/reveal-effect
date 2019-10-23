@@ -25,6 +25,14 @@ function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
     return Math.max(rect1.left, rect2.left) < Math.min(rect1.right, rect2.right) && Math.max(rect1.top, rect2.top) < Math.min(rect1.bottom, rect2.bottom);
 }
 
+function isOverflowed(element: HTMLElement) {
+    return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+}
+
+function getNow() {
+    return performance.now();
+}
+
 /**
  * Draw round rect to canvas context.
  * @param ctx - CanvasRenderingContext2D
@@ -189,8 +197,8 @@ function updateCanvas() {
 }
 
 function handleScroll(e: Event) {
+    // const now = getNow();
     let hoverEl = document.body as HTMLElement;
-
     revealItemsMap.forEach(({ element }) => {
         if (element) {
             const rect = element.getBoundingClientRect() as DOMRect;
@@ -203,11 +211,14 @@ function handleScroll(e: Event) {
         }
     });
     drawEffect(currMousePosition.x, currMousePosition.y, hoverEl);
+    // console.log(`spayed time: ${getNow() - now}`);
 }
 
 function handleMouseMove(e: MouseEvent) {
+    // const now = getNow();
     const el = e.target as HTMLElement;
     drawEffect(e.clientX, e.clientY, el);
+    // console.log(`spayed time: ${getNow() - now}`);
 }
 
 function getHoverParentEl(hoverEl: HTMLElement) {
@@ -402,8 +413,9 @@ function addRevealItem(revealItem: RevealItem) {
     const { element } = revealItem;
     if (element) {
         revealItemsMap.set(element, revealItem);
-        if (element.parentElement) {
-            coverItemsMap.set(element.parentElement as HTMLElement, true);
+        const { parentElement } = element;
+        if (parentElement && isOverflowed(parentElement)) {
+            coverItemsMap.set(parentElement as HTMLElement, true);
         }
     }
 }
@@ -418,8 +430,9 @@ function addRevealItems(revealItems: RevealItem[]) {
         const { element } = revealItem;
         if (element) {
             revealItemsMap.set(element, revealItem);
-            if (element.parentElement) {
-                coverItemsMap.set(element.parentElement as HTMLElement, true);
+            const { parentElement } = element;
+            if (parentElement && isOverflowed(parentElement)) {
+                coverItemsMap.set(parentElement as HTMLElement, true);
             }
         }
     });
@@ -434,8 +447,9 @@ function addRevealEl(element: HTMLElement) {
     if (element) {
         const revealItem = { element };
         revealItemsMap.set(element, revealItem);
-        if (element.parentElement) {
-            coverItemsMap.set(element.parentElement as HTMLElement, true);
+        const { parentElement } = element;
+        if (parentElement && isOverflowed(parentElement)) {
+            coverItemsMap.set(parentElement as HTMLElement, true);
         }
     }
 }
@@ -450,8 +464,9 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
         if (element) {
             const revealItem = { element };
             revealItemsMap.set(element, revealItem);
-            if (element.parentElement) {
-                coverItemsMap.set(element.parentElement as HTMLElement, true);
+            const { parentElement } = element;
+            if (parentElement && isOverflowed(parentElement)) {
+                coverItemsMap.set(parentElement as HTMLElement, true);
             }
         }
     });
