@@ -15,6 +15,13 @@ const revealStore: RevealStore = {
 } as any;
 const revealItemsMap = new Map<HTMLElement, RevealItem>();
 const coverItemsMap = new Map<HTMLElement, boolean>();
+const observersMap = new Map<HTMLElement, MutationObserver>();;
+const observerConfig: MutationObserverInit = {
+    attributes: true,
+    characterData: false,
+    childList: false,
+    subtree: false
+};
 
 /**
  * Detect rectangle is overlap.
@@ -27,10 +34,6 @@ function isRectangleOverlap(rect1: DOMRect, rect2: DOMRect) {
 
 function isOverflowed(element: HTMLElement) {
     return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
-}
-
-function getNow() {
-    return performance.now();
 }
 
 /**
@@ -404,6 +407,28 @@ function checkAndCreateCanvas() {
     }
 }
 
+function addObserver(element: HTMLElement) {
+    const observer = new MutationObserver((mutationsList) => {
+        drawEffect(currMousePosition.x, currMousePosition.y, document.documentElement);
+    });
+    // Start observing the target node for configured mutations
+    observer.observe(element, observerConfig);
+    observersMap.set(element, observer);
+}
+
+function clearObserver(element: HTMLElement) {
+    const observer = observersMap.get(element);
+    if (observer) {
+        observer.disconnect();
+        revealItemsMap.delete(element);
+    }
+}
+
+function clearObservers() {
+    observersMap.forEach(observer => observer.disconnect());
+    observersMap.clear();
+}
+
 /**
  * Add reveal effect to revealItem.
  * @param revealItem - RevealItem
@@ -412,6 +437,7 @@ function addRevealItem(revealItem: RevealItem) {
     checkAndCreateCanvas();
     const { element } = revealItem;
     if (element) {
+        addObserver(element);
         revealItemsMap.set(element, revealItem);
         const { parentElement } = element;
         if (parentElement && isOverflowed(parentElement)) {
@@ -429,6 +455,7 @@ function addRevealItems(revealItems: RevealItem[]) {
     revealItems.forEach(revealItem => {
         const { element } = revealItem;
         if (element) {
+            addObserver(element);
             revealItemsMap.set(element, revealItem);
             const { parentElement } = element;
             if (parentElement && isOverflowed(parentElement)) {
@@ -445,6 +472,7 @@ function addRevealItems(revealItems: RevealItem[]) {
 function addRevealEl(element: HTMLElement) {
     checkAndCreateCanvas();
     if (element) {
+        addObserver(element);
         const revealItem = { element };
         revealItemsMap.set(element, revealItem);
         const { parentElement } = element;
@@ -462,6 +490,7 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
     checkAndCreateCanvas();
     elements.forEach((element: HTMLElement) => {
         if (element) {
+            addObserver(element);
             const revealItem = { element };
             revealItemsMap.set(element, revealItem);
             const { parentElement } = element;
@@ -474,6 +503,7 @@ function addRevealEls(elements: HTMLElement[] | NodeListOf<HTMLElement>) {
 
 function addCoverEl(element: HTMLElement) {
     if (element) {
+        addObserver(element);
         coverItemsMap.set(element, true);
     }
 }
@@ -493,6 +523,7 @@ function clearRevealEl(element: HTMLElement) {
     if (revealItemsMap.has(element)) {
         revealItemsMap.delete(element);
     }
+    clearObserver(element);
     clearCanvas();
 }
 
@@ -502,6 +533,7 @@ function clearRevealEl(element: HTMLElement) {
 function clearRevealItem(revealItem: RevealItem) {
     if (revealItemsMap.has(revealItem.element)) {
         revealItemsMap.delete(revealItem.element);
+        clearObserver(revealItem.element);
     }
     clearCanvas();
 }
@@ -512,6 +544,7 @@ function clearRevealItem(revealItem: RevealItem) {
 function clearRevealEls() {
     revealItemsMap.clear();
     clearCanvas();
+    clearObservers();
 }
 
 /**
@@ -520,6 +553,7 @@ function clearRevealEls() {
 function clearRevealItems() {
     revealItemsMap.clear();
     clearCanvas();
+    clearObservers();
 }
 
 function getRevealConfig(config: RevalConfig) {
