@@ -20,8 +20,21 @@ const observerConfig: MutationObserverInit = {
     attributes: true,
     characterData: false,
     childList: false,
-    subtree: false
+    subtree: true
 };
+
+function px2numb(px: string | null) {
+    return px ? Number(px.replace("px", "")) : 0;
+}
+
+function getBorderRadius(style: CSSStyleDeclaration) {
+    return {
+        borderTopLeftRadius: px2numb(style.borderTopLeftRadius),
+        borderTopRightRadius: px2numb(style.borderTopRightRadius),
+        borderBottomLeftRadius: px2numb(style.borderBottomLeftRadius),
+        borderBottomRightRadius: px2numb(style.borderBottomRightRadius)
+    }
+}
 
 /**
  * Detect rectangle is overlap.
@@ -36,29 +49,90 @@ function isOverflowed(element: HTMLElement) {
     return element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
 }
 
-/**
- * Draw round rect to canvas context.
- * @param ctx - CanvasRenderingContext2D
- * @param x - number
- * @param y - number
- * @param w - number
- * @param h - number
- * @param r - number
- */
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-    if (w < 2 * r) r = w / 2;
-    if (h < 2 * r) r = h / 2;
+enum DrawType {
+    Fill,
+    Stroke
+}
+    
+function drawRadiusRect(ctx: CanvasRenderingContext2D, rect: { x: number, y: number, w: number, h: number }, radius: { borderTopLeftRadius: number; borderTopRightRadius: number; borderBottomLeftRadius: number; borderBottomRightRadius: number; }) {
+    const { x, y, w, h } = rect;
+    const {
+        borderTopLeftRadius,
+        borderTopRightRadius,
+        borderBottomLeftRadius,
+        borderBottomRightRadius
+    } = radius;
 
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    // tl start point.
+    ctx.moveTo(x, y + borderTopLeftRadius);
+
+    // tl radius.
+    ctx.arcTo(x, y, x + borderTopLeftRadius, y, borderTopLeftRadius);
+
+    // top line.
+    ctx.lineTo(x + w - borderTopRightRadius, y);
+    // tr radius.
+    ctx.arcTo(x + w, y, x + w, y + borderTopRightRadius, borderTopRightRadius);
+    
+    // right line.
+    ctx.lineTo(x + w, y + h - borderBottomRightRadius);
+
+    // br radius.
+    ctx.arcTo(x + w, y + h, x + w - borderBottomRightRadius, y + h, borderBottomRightRadius);
+    // bottom line.
+    ctx.lineTo(x + borderBottomLeftRadius, y + h);
+    // bl radius.
+    ctx.arcTo(x, y + h, x, y + h - borderBottomLeftRadius, borderBottomLeftRadius);
+
+    // left line.
+    ctx.lineTo(x, y + borderTopLeftRadius);
+}
+
+function drawElement2Ctx(ctx: CanvasRenderingContext2D, element: HTMLElement, drawType: DrawType = DrawType.Stroke) {
+    const rect = element.getBoundingClientRect() as DOMRect;
+    const {
+        left: x,
+        top: y,
+        width: w,
+        height: h
+    } = rect;
+    const style = window.getComputedStyle(element);
+    const {
+        borderTopWidth,
+        borderBottomWidth,
+        borderLeftWidth,
+        borderRightWidth
+    } = style;
+    const [topWidth, bottomWidth, leftWidth, rightWidth] = [borderTopWidth, borderBottomWidth, borderLeftWidth, borderRightWidth].map(t => px2numb(t));
+    const isHadBorder = [topWidth, bottomWidth, leftWidth, rightWidth].some(t => Boolean(t));
+    const isStroke = drawType === DrawType.Stroke;
+
+    const borderRadius = getBorderRadius(style);
+    if (isStroke) {
+        if (isHadBorder) {
+            ctx.globalCompositeOperation = "source-over";
+            drawRadiusRect(ctx, { x, y, w, h }, borderRadius);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+
+            ctx.globalCompositeOperation = "destination-out";
+            drawRadiusRect(ctx, { x: x + leftWidth, y: y + topWidth, w: w - leftWidth - rightWidth, h: h - topWidth - bottomWidth }, borderRadius);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+        } else {
+            const offsetWidth = ctx.lineWidth / 2;
+            drawRadiusRect(ctx, { x: x + offsetWidth, y: y + offsetWidth, w: w - ctx.lineWidth, h: h - ctx.lineWidth }, borderRadius);
+            ctx.stroke();
+        }
+    } else {
+        drawRadiusRect(ctx, { x, y, w, h }, borderRadius);
+        ctx.fill();
+    }
 
     return ctx;
 }
+
 
 /**
  * Detect cursor is inside to rect.
@@ -288,12 +362,6 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
         ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     }
 
-    let hoverBorderRadius: number;
-    if (isHoverReveal) {
-        const elBorderRadius = window.getComputedStyle(hoverEl).borderRadius as string;
-        hoverBorderRadius = Number(elBorderRadius.replace("px", ""));
-    }
-
     // inside hover effect.
     function drawHover() {
         if (isHoverReveal) {
@@ -302,13 +370,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
             revealStore.hoverCtx.globalCompositeOperation = "destination-in";
             revealStore.hoverCtx.fillStyle = "#fff";
-            const hoverRect = hoverEl.getBoundingClientRect() as DOMRect;
-            if (hoverBorderRadius) {
-                roundRect(revealStore.hoverCtx, hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height, hoverBorderRadius);
-                revealStore.hoverCtx.fill();
-            } else {
-                revealStore.hoverCtx.fillRect(hoverRect.left, hoverRect.top, hoverRect.width, hoverRect.height);
-            }
+            drawElement2Ctx(revealStore.hoverCtx, hoverEl, DrawType.Fill);
         }
     }
 
@@ -320,38 +382,15 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
                 if (!element) return;
                 const currRevealConfig = getRevealConfig(revealItem);
                 const { borderColor } = currRevealConfig.colorMiddleware(currRevealConfig.hoverColor);
-                const rect = element.getBoundingClientRect() as DOMRect;
-                const computedStyle = window.getComputedStyle(element);
-                const elBorderWidth = computedStyle.borderWidth as string;
-                const elBorderRadius = computedStyle.borderRadius as string;
-                let borderWidth = Number(elBorderWidth.replace("px", ""));
-                const borderRadius = Number(elBorderRadius.replace("px", ""));
 
                 revealStore.borderCtx.globalCompositeOperation = "source-over";
                 revealStore.borderCtx.strokeStyle = borderColor;
-                if (borderWidth || currRevealConfig.borderType === "inside") {
-                    // draw inside border.
-                    if (!borderWidth) borderWidth = currRevealConfig.borderWidth;
-                    const halfBorderWidth = borderWidth / 2;
-                    revealStore.borderCtx.lineWidth = borderWidth;
-                    if (borderRadius) {
-                        roundRect(revealStore.borderCtx, rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth, borderRadius);
-                        revealStore.borderCtx.stroke();
-                    } else {
-                        revealStore.borderCtx.strokeRect(rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth);
-                    }
-                } else {
-                    // draw outside border.
-                    borderWidth = currRevealConfig.borderWidth;
-                    const halfBorderWidth = borderWidth / 2;
-                    revealStore.borderCtx.lineWidth = borderWidth;
-                    if (borderRadius) {
-                        roundRect(revealStore.borderCtx, rect.x - halfBorderWidth, rect.y - halfBorderWidth, rect.width + borderWidth, rect.height + borderWidth, borderRadius);
-                        revealStore.borderCtx.stroke();
-                    } else {
-                        revealStore.borderCtx.strokeRect(rect.x - halfBorderWidth, rect.y - halfBorderWidth, rect.width + borderWidth, rect.height + borderWidth);
-                    }
-                }
+
+                // draw inside border.
+                revealStore.borderCtx.lineWidth = currRevealConfig.borderWidth;
+                
+                drawElement2Ctx(revealStore.borderCtx, element, DrawType.Stroke);
+                // xxx(revealStore.borderCtx, rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth, borderRadius);
 
                 const parentEl = element.parentElement as HTMLElement;
                 if (coverItemsMap.has(parentEl)) {
