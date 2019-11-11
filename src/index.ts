@@ -15,12 +15,19 @@ const revealStore: RevealStore = {
 } as any;
 const revealItemsMap = new Map<HTMLElement, RevealItem>();
 const coverItemsMap = new Map<HTMLElement, boolean>();
-const observersMap = new Map<HTMLElement, MutationObserver>();;
+const observersMap = new Map<HTMLElement, MutationObserver>();
+
 const observerConfig: MutationObserverInit = {
     attributes: true,
     characterData: false,
     childList: false,
-    subtree: true
+    subtree: false
+};
+const observerParentConfig: MutationObserverInit = {
+    attributes: false,
+    characterData: false,
+    childList: true,
+    subtree: false
 };
 
 function px2numb(px: string | null) {
@@ -53,7 +60,7 @@ enum DrawType {
     Fill,
     Stroke
 }
-    
+
 function drawRadiusRect(ctx: CanvasRenderingContext2D, rect: { x: number, y: number, w: number, h: number }, radius: { borderTopLeftRadius: number; borderTopRightRadius: number; borderBottomLeftRadius: number; borderBottomRightRadius: number; }) {
     const { x, y, w, h } = rect;
     const {
@@ -74,7 +81,7 @@ function drawRadiusRect(ctx: CanvasRenderingContext2D, rect: { x: number, y: num
     ctx.lineTo(x + w - borderTopRightRadius, y);
     // tr radius.
     ctx.arcTo(x + w, y, x + w, y + borderTopRightRadius, borderTopRightRadius);
-    
+
     // right line.
     ctx.lineTo(x + w, y + h - borderBottomRightRadius);
 
@@ -123,6 +130,7 @@ function drawElement2Ctx(ctx: CanvasRenderingContext2D, element: HTMLElement, dr
         } else {
             const offsetWidth = ctx.lineWidth / 2;
             drawRadiusRect(ctx, { x: x + offsetWidth, y: y + offsetWidth, w: w - ctx.lineWidth, h: h - ctx.lineWidth }, borderRadius);
+            ctx.closePath();
             ctx.stroke();
         }
     } else {
@@ -139,7 +147,7 @@ function drawElement2Ctx(ctx: CanvasRenderingContext2D, element: HTMLElement, dr
  * @param position The mouse cursor position.
  * @param rect The DOMRect.
  */
-function isRectInside(position: { left: number; top: number}, rect: DOMRect) {
+function isRectInside(position: { left: number; top: number }, rect: DOMRect) {
     return (position.left > rect.left && position.left < rect.right && position.top > rect.top && position.top < rect.bottom);
 }
 
@@ -388,7 +396,7 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
                 // draw inside border.
                 revealStore.borderCtx.lineWidth = currRevealConfig.borderWidth;
-                
+
                 drawElement2Ctx(revealStore.borderCtx, element, DrawType.Stroke);
                 // xxx(revealStore.borderCtx, rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth, borderRadius);
 
@@ -447,11 +455,20 @@ function checkAndCreateCanvas() {
 }
 
 function addObserver(element: HTMLElement) {
+    const { parentElement } = element;
     const observer = new MutationObserver((mutationsList) => {
         drawEffect(currMousePosition.x, currMousePosition.y, document.documentElement);
+        if (parentElement && !parentElement.contains(element)) {
+            observer.disconnect();
+            revealItemsMap.delete(element);
+            observersMap.delete(element);
+        }
     });
-    // Start observing the target node for configured mutations
+    // Start observing the target node for configured mutations.
     observer.observe(element, observerConfig);
+    if (parentElement) {
+        observer.observe(parentElement, observerParentConfig);
+    }
     observersMap.set(element, observer);
 }
 
