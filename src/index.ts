@@ -17,19 +17,6 @@ const revealItemsMap = new Map<HTMLElement, RevealItem>();
 const coverItemsMap = new Map<HTMLElement, boolean>();
 const observersMap = new Map<HTMLElement, MutationObserver>();
 
-const observerConfig: MutationObserverInit = {
-    attributes: true,
-    characterData: false,
-    childList: false,
-    subtree: false
-};
-const observerParentConfig: MutationObserverInit = {
-    attributes: false,
-    characterData: false,
-    childList: true,
-    subtree: false
-};
-
 function px2numb(px: string | null) {
     return px ? Number(px.replace("px", "")) : 0;
 }
@@ -120,12 +107,12 @@ function drawElement2Ctx(ctx: CanvasRenderingContext2D, element: HTMLElement, dr
         if (isHadBorder) {
             ctx.globalCompositeOperation = "source-over";
             drawRadiusRect(ctx, { x, y, w, h }, borderRadius);
-            ctx.fillStyle = "#fff";
+            // ctx.fillStyle = "#fff";
             ctx.fill();
 
             ctx.globalCompositeOperation = "destination-out";
             drawRadiusRect(ctx, { x: x + leftWidth, y: y + topWidth, w: w - leftWidth - rightWidth, h: h - topWidth - bottomWidth }, borderRadius);
-            ctx.fillStyle = "#fff";
+            // ctx.fillStyle = "#fff";
             ctx.fill();
         } else {
             const offsetWidth = ctx.lineWidth / 2;
@@ -275,6 +262,8 @@ function updateCanvas() {
 
     document.removeEventListener("scroll", handleScroll, true);
     document.addEventListener("scroll", handleScroll, true);
+    document.removeEventListener("click", handleScroll, true);
+    document.addEventListener("click", handleScroll, true);
     window.removeEventListener("resize", updateCanvas);
     window.addEventListener("resize", updateCanvas);
     window.removeEventListener("mousemove", handleMouseMove);
@@ -282,7 +271,6 @@ function updateCanvas() {
 }
 
 function handleScroll(e: Event) {
-    // const now = getNow();
     let hoverEl = document.body as HTMLElement;
     revealItemsMap.forEach(({ element }) => {
         if (element) {
@@ -295,15 +283,12 @@ function handleScroll(e: Event) {
             }
         }
     });
-    drawEffect(currMousePosition.x, currMousePosition.y, hoverEl);
-    // console.log(`spayed time: ${getNow() - now}`);
+    drawEffect(currMousePosition.x, currMousePosition.y, hoverEl, true);
 }
 
 function handleMouseMove(e: MouseEvent) {
-    // const now = getNow();
     const el = e.target as HTMLElement;
-    drawEffect(e.clientX, e.clientY, el);
-    // console.log(`spayed time: ${getNow() - now}`);
+    drawEffect(e.clientX, e.clientY, el, true);
 }
 
 function getHoverParentEl(hoverEl: HTMLElement) {
@@ -319,11 +304,21 @@ function getHoverParentEl(hoverEl: HTMLElement) {
     return parentEl;
 }
 
-function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
+function clearHoverCtx() {
+    revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function clearBorderCtx() {
+    revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement, clearHover: boolean) {
     currMousePosition.x = mouseX;
     currMousePosition.y = mouseY;
-    revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    if (clearHover) {
+        clearHoverCtx();
+    }
+    clearBorderCtx();
 
     let isHoverReveal = revealItemsMap.has(hoverEl);
     if (!isHoverReveal && !coverItemsMap.has(hoverEl)) {
@@ -396,10 +391,10 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
                 // draw inside border.
                 revealStore.borderCtx.lineWidth = currRevealConfig.borderWidth;
-
+                revealStore.borderCtx.fillStyle = currRevealConfig.hoverColor;
+                revealStore.borderCtx.strokeStyle = currRevealConfig.hoverColor;
+                
                 drawElement2Ctx(revealStore.borderCtx, element, DrawType.Stroke);
-                // xxx(revealStore.borderCtx, rect.x + halfBorderWidth, rect.y + halfBorderWidth, rect.width - borderWidth, rect.height - borderWidth, borderRadius);
-
                 const parentEl = element.parentElement as HTMLElement;
                 if (coverItemsMap.has(parentEl)) {
                     const rect = parentEl.getBoundingClientRect() as DOMRect;
@@ -438,8 +433,8 @@ function drawEffect(mouseX: number, mouseY: number, hoverEl: HTMLElement) {
 
 function clearCanvas() {
     if (isCanvasCreated()) {
-        revealStore.hoverCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        revealStore.borderCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        clearHoverCtx();
+        clearBorderCtx();
     }
     revealItemsMap.clear();
 }
@@ -454,18 +449,41 @@ function checkAndCreateCanvas() {
     }
 }
 
+const observerConfig: MutationObserverInit = {
+    attributes: true,
+    characterData: false,
+    childList: true,
+    subtree: true
+};
+
+const observerParentConfig: MutationObserverInit = {
+    attributes: true,
+    characterData: false,
+    childList: true,
+    subtree: true
+};
+
 function addObserver(element: HTMLElement) {
     const { parentElement } = element;
     const observer = new MutationObserver((mutationsList) => {
-        drawEffect(currMousePosition.x, currMousePosition.y, document.documentElement);
-        if (parentElement && !parentElement.contains(element)) {
-            observer.disconnect();
-            revealItemsMap.delete(element);
-            observersMap.delete(element);
+        const elements = revealItemsMap.keys();
+        let isRemoved = false;
+        for (const el of elements) {
+            if (!document.documentElement.contains(el)) {
+                revealItemsMap.delete(el);
+                observersMap.delete(el);
+                // observer.disconnect();
+                isRemoved = el === element;
+            }
+            if (isRemoved) break;
         }
+        if (isRemoved) return;
+
+        const isInsideEl = isRectInside({ left: currMousePosition.x, top: currMousePosition.y }, element.getBoundingClientRect() as DOMRect);
+        drawEffect(currMousePosition.x, currMousePosition.y, isInsideEl ? element : document.documentElement, isInsideEl);
     });
     // Start observing the target node for configured mutations.
-    observer.observe(element, observerConfig);
+    // observer.observe(element, observerConfig);
     if (parentElement) {
         observer.observe(parentElement, observerParentConfig);
     }
