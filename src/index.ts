@@ -1,13 +1,15 @@
 import tinyColor from "tinycolor2";
 import * as easing from "d3-ease";
+import * as gsap from "gsap";
 
-// TODO: Add reveal mousedown animation.
+
 interface RevealStore {
     hoverCanvas: HTMLCanvasElement;
     borderCanvas: HTMLCanvasElement;
     hoverCtx: CanvasRenderingContext2D;
     borderCtx: CanvasRenderingContext2D;
     isMouseDown: boolean;
+    hoverScale: number;
 }
 
 const revealStore: RevealStore = {
@@ -15,7 +17,8 @@ const revealStore: RevealStore = {
     borderCanvas: null,
     hoverCtx: null,
     borderCtx: null,
-    isMouseDown: false
+    isMouseDown: false,
+    hoverScale: 1
 } as any;
 const revealItemsMap = new Map<HTMLElement, RevealItem>();
 const coverItemsMap = new Map<HTMLElement, boolean>();
@@ -313,7 +316,7 @@ function clearBorderCtx() {
 }
 
 function drawHoverCircle(ctx: CanvasRenderingContext2D, hoverRevealConfig: Required<RevalConfig>) {
-    const scale = revealStore.isMouseDown ? 1.2 : 1;
+    const scale = revealStore.hoverScale;
     const { x: mouseX, y: mouseY } = currMousePosition;
     const width = hoverRevealConfig.hoverSize * 2;
     ctx.save();
@@ -502,16 +505,33 @@ function clearObservers() {
     observersMap.clear();
 }
 
+const hoverMaxScale = 1.5;
+const hoverTime = .4;
+const ease = "Quart.easeInOut";
 
 function addEvent2Elm(element: HTMLElement) {
     element.addEventListener("mousedown", (e) => {
         revealStore.isMouseDown = true;
-        drawEffect(currMousePosition.x, currMousePosition.y, element, true);
+        const tlMax = gsap.TweenLite.to(revealStore, hoverTime, {
+            hoverScale: hoverMaxScale,
+            ease,
+            onUpdate() {
+                drawEffect(currMousePosition.x, currMousePosition.y, element, true);
+            }
+        });
+        tlMax.restart();
     });
 
     element.addEventListener("mouseup", (e) => {
         revealStore.isMouseDown = false;
-        drawEffect(currMousePosition.x, currMousePosition.y, element, true);
+        const tlMax = gsap.TweenLite.to(revealStore, hoverTime / 2, {
+            hoverScale: 1,
+            ease,
+            onUpdate() {
+                drawEffect(currMousePosition.x, currMousePosition.y, element, true);
+            }
+        });
+        tlMax.play();
         drawHover(element);
     });
 }
@@ -646,7 +666,8 @@ function getRevealConfig(config: RevalConfig) {
         const gradient = revealStore.hoverCtx.createRadialGradient(newConfig.hoverSize, newConfig.hoverSize, 0, newConfig.hoverSize, newConfig.hoverSize, newConfig.hoverSize)
         const step = 0.01;
         for (let x = 1; x > 0; x -= step) {
-            let alpha = easing.easeCubicIn(x);
+            // let alpha = easing.easeCubicIn(x);
+            let alpha = easing.easeCubicInOut(x);
             gradient.addColorStop(x, `hsla(${hsla.h}, ${hsla.h * 100}%, ${hsla.l * 100}%, ${(1 - alpha) * hsla.a})`);
         }
         const borderColor = tinyColor({
