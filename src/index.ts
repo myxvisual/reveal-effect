@@ -99,7 +99,7 @@ function drawRadiusRect(ctx: CanvasRenderingContext2D, rect: { x: number, y: num
 
 function drawElement2Ctx(ctx: CanvasRenderingContext2D, element: HTMLElement, drawType: DrawType = DrawType.Stroke) {
     const rect = element.getBoundingClientRect() as DOMRect;
-    const {
+    let {
         left: x,
         top: y,
         width: w,
@@ -316,14 +316,18 @@ function clearBorderCtx() {
 }
 
 function drawHoverCircle(ctx: CanvasRenderingContext2D, hoverRevealConfig: Required<RevalConfig>) {
-    const scale = revealStore.hoverScale;
+    let { hoverScale } = revealStore;
     const { x: mouseX, y: mouseY } = currMousePosition;
-    const width = hoverRevealConfig.hoverSize * 2;
+    let { hoverSize, hoverGradient } = hoverRevealConfig;
+    hoverSize = hoverSize * hoverScale;
+    const width = hoverSize * 2;
+
     ctx.save();
-    ctx.translate(mouseX - hoverRevealConfig.hoverSize * scale, mouseY - hoverRevealConfig.hoverSize * scale);
-    ctx.fillStyle = hoverRevealConfig.hoverGradient;
-    ctx.scale(scale, scale);
-    ctx.fillRect(0, 0, width * scale, width * scale);
+    ctx.translate(mouseX, mouseY);
+    ctx.fillStyle = 0 ? "#fff" : hoverGradient;
+    ctx.scale(width, width);
+    ctx.filter = `blur(${hoverSize / 10}px)`;
+    ctx.fillRect(-.5, -.5, 1, 1);
     ctx.restore();
 }
 
@@ -505,34 +509,39 @@ function clearObservers() {
     observersMap.clear();
 }
 
-const hoverMaxScale = 1.5;
-const hoverTime = .4;
+const hoverMaxScale = .5;
+const hoverTime = 2;
+const hoverShortTime = .2;
 const ease = "Quart.easeInOut";
 
 function addEvent2Elm(element: HTMLElement) {
+    revealStore.hoverScale = hoverMaxScale;
+    let tlMax: gsap.TweenLite = gsap.TweenLite.to(revealStore, hoverTime, {
+        hoverScale: 1,
+        ease,
+        onUpdate() {
+            drawEffect(currMousePosition.x, currMousePosition.y, element, true);
+        }
+    });;
     element.addEventListener("mousedown", (e) => {
         revealStore.isMouseDown = true;
-        const tlMax = gsap.TweenLite.to(revealStore, hoverTime, {
-            hoverScale: hoverMaxScale,
-            ease,
-            onUpdate() {
-                drawEffect(currMousePosition.x, currMousePosition.y, element, true);
-            }
-        });
+        revealStore.hoverScale = hoverMaxScale;
         tlMax.restart();
     });
 
     element.addEventListener("mouseup", (e) => {
         revealStore.isMouseDown = false;
-        const tlMax = gsap.TweenLite.to(revealStore, hoverTime / 2, {
+        const tlRestore = gsap.TweenLite.to(revealStore, hoverShortTime, {
             hoverScale: 1,
             ease,
             onUpdate() {
                 drawEffect(currMousePosition.x, currMousePosition.y, element, true);
             }
         });
-        tlMax.play();
-        drawHover(element);
+        if (tlMax) {
+            tlMax.pause();
+        }
+        tlRestore.play();
     });
 }
 
@@ -663,12 +672,12 @@ function getRevealConfig(config: RevalConfig) {
     let storeColor = colorMap.get(hslaColor) as ColorStore;
 
     if (!storeColor) {
-        const gradient = revealStore.hoverCtx.createRadialGradient(newConfig.hoverSize, newConfig.hoverSize, 0, newConfig.hoverSize, newConfig.hoverSize, newConfig.hoverSize)
+        const gradient = revealStore.hoverCtx.createRadialGradient(0, 0, 0, 0, 0, 1)
         const step = 0.01;
         for (let x = 1; x > 0; x -= step) {
             // let alpha = easing.easeCubicIn(x);
             let alpha = easing.easeCubicInOut(x);
-            gradient.addColorStop(x, `hsla(${hsla.h}, ${hsla.h * 100}%, ${hsla.l * 100}%, ${(1 - alpha) * hsla.a})`);
+            gradient.addColorStop(x / 2, `hsla(${hsla.h}, ${hsla.h * 100}%, ${hsla.l * 100}%, ${(1 - alpha) * hsla.a})`);
         }
         const borderColor = tinyColor({
             h: hsla.h,
